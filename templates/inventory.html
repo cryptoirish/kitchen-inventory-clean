@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Inventory</title>
+    <style>
+        body { font-family: Arial; max-width: 1200px; margin: 50px auto; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #007bff; color: white; }
+        .low { background-color: #fff3cd; }
+        .critical { background-color: #f8d7da; }
+        .btn { display: inline-block; padding: 8px 15px; background: #007bff; color: white; 
+               text-decoration: none; border-radius: 5px; margin: 5px; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .btn-danger { background: #dc3545; }
+        input[type="number"] { width: 80px; padding: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Inventory</h1>
+    <a href="/" class="btn">Home</a>
+    <a href="/add" class="btn">Add Item</a>
+    
+    <table>
+        <tr>
+            <th>Item</th>
+            <th>Category</th>
+            <th>Stock</th>
+            <th>Reorder Point</th>
+            <th>Cost/Unit</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+        {% for item in items %}
+        <tr {% if item.stock <= item.reorder_point %}class="critical"
+            {% elif item.stock <= item.reorder_point * 1.5 %}class="low"{% endif %}>
+            <td>{{ item.name }}</td>
+            <td>{{ item.category }}</td>
+            <td>{{ item.stock }} {{ item.unit }}</td>
+            <td>{{ item.reorder_point }} {{ item.unit }}</td>
+            <td>£{{ item.cost }}</td>
+            <td>
+                {% if item.stock <= item.reorder_point %}
+                    🔴 Reorder Now
+                {% elif item.stock <= item.reorder_point * 1.5 %}
+                    🟡 Low Stock
+                {% else %}
+                    🟢 Good
+                {% endif %}
+            </td>
+            <td>
+                <form method="POST" action="/update/{{ item.id }}" style="display:inline;">
+                    <input type="number" name="stock" step="0.01" placeholder="New stock">
+                    <button type="submit" class="btn btn-sm">Update</button>
+                </form>
+                <a href="/delete/{{ item.id }}" class="btn btn-sm btn-danger" 
+                   onclick="return confirm('Delete this item?')">Delete</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+                </html>
