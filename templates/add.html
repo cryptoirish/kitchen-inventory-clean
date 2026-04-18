@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add Item</title>
+    <style>
+        body { font-family: Arial; max-width: 600px; margin: 50px auto; padding: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 8px; font-size: 14px; }
+        .btn { padding: 10px 20px; background: #007bff; color: white; border: none; 
+               border-radius: 5px; cursor: pointer; font-size: 16px; }
+        .btn:hover { background: #0056b3; }
+        a { color: #007bff; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <h1>Add New Item</h1>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label>Item Name</label>
+            <input type="text" name="name" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Category</label>
+            <select name="category" required>
+                <option value="Protein">Protein</option>
+                <option value="Vegetables">Vegetables</option>
+                <option value="Dairy">Dairy</option>
+                <option value="Dry Goods">Dry Goods</option>
+                <option value="Beverages">Beverages</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label>Unit</label>
+            <select name="unit" required>
+                <option value="kg">kg</option>
+                <option value="L">L</option>
+                <option value="pieces">pieces</option>
+                <option value="boxes">boxes</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label>Current Stock</label>
+            <input type="number" name="stock" step="0.01" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Reorder Point</label>
+            <input type="number" name="reorder" step="0.01" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Cost per Unit (£)</label>
+            <input type="number" name="cost" step="0.01" required>
+        </div>
+        
+        <button type="submit" class="btn">Add Item</button>
+        <a href="/inventory">Cancel</a>
+    </form>
+</body>
+</html>
