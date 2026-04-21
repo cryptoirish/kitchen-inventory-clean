@@ -448,3 +448,151 @@
                 <div class="stat-number" style="color: {% if low_stock_count > 0 %}#e74c3c{% else %}#27ae60{% endif %}">
                     {{ low_stock_count }}
                 </div>
+                <div class="stat-label">Low Stock Alerts</div>
+                {% if low_stock_count > 0 %}
+                <div class="stat-change" style="color: #e74c3c;">↗ Needs attention</div>
+                {% else %}
+                <div class="stat-change">✓ All good</div>
+                {% endif %}
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">💰</div>
+                <div class="stat-number">£{{ "%.0f"|format(total_value) }}</div>
+                <div class="stat-label">Inventory Value</div>
+                <div class="stat-change">↗ Current stock worth</div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="features-container">
+            <h2 class="section-title">Built for Professional Kitchens</h2>
+            <p class="section-subtitle">Everything you need to manage inventory, control costs, and run a profitable kitchen operation</p>
+            
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Real-Time Tracking</h3>
+                    <p>Monitor stock levels instantly. Get automatic alerts when items need reordering. Never run out of critical ingredients again.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">💷</div>
+                    <h3>Cost Control</h3>
+                    <p>Track ingredient costs, calculate recipe margins, and identify opportunities to reduce waste and increase profitability.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">📱</div>
+                    <h3>Mobile Access</h3>
+                    <p>Update inventory from anywhere. Perfect for stock checks, deliveries, and on-the-go management from your phone or tablet.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">📋</div>
+                    <h3>HACCP Ready</h3>
+                    <p>Built with food safety in mind. Track temperatures, log checks, and maintain compliance records all in one place.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">🍽️</div>
+                    <h3>Recipe Costing</h3>
+                    <p>Calculate exact food costs for every dish. Auto-update when ingredient prices change. Optimize your menu for maximum profit.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">📈</div>
+                    <h3>Smart Reports</h3>
+                    <p>Generate insights on stock movement, waste, and purchasing patterns. Make data-driven decisions for your kitchen.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Chef Section -->
+    <section class="chef-section">
+        <div class="chef-content">
+            <h2>Built by Chefs, for Chefs</h2>
+            <p>After 35 years in professional kitchens—from fine dining to hotels to institutional catering—I built the inventory system I always wished I had. No complex software. No features you'll never use. Just the tools you actually need to run your kitchen efficiently.</p>
+            <div class="chef-icons">
+                <span>👨‍🍳</span>
+                <span>📋</span>
+                <span>✅</span>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Chart Section -->
+    <section class="chart-section">
+        <div class="chart-container">
+            <div class="chart-card">
+                <h3>Stock Level Overview</h3>
+                <div class="chart-bars">
+                    <div class="bar" style="height: 85%;"></div>
+                    <div class="bar" style="height: 65%;"></div>
+                    <div class="bar" style="height: 90%;"></div>
+                    <div class="bar" style="height: 45%;"></div>
+                    <div class="bar" style="height: 75%;"></div>
+                    <div class="bar" style="height: 95%;"></div>
+                    <div class="bar" style="height: 55%;"></div>
+                </div>
+            </div>
+            
+            <div class="chart-card">
+                <h3>Cost Trends</h3>
+                <div class="chart-bars">
+                    <div class="bar" style="height: 60%; background: linear-gradient(to top, #1e3c72, #2a5298);"></div>
+                    <div class="bar" style="height: 70%; background: linear-gradient(to top, #1e3c72, #2a5298);"></div>
+                    <div class="bar" style="height: 65%; background: linear-gradient(to top, #1e3c72, #2a5298);"></div>
+                    <div class="bar" style="height: 80%; background: linear-gradient(to top, #1e3c72, #2a5298);"></div>
+                    <div class="bar" style="height: 75%; background: linear-gradient(to top, #1e3c72, #2a5298);"></div>
+                    <div class="bar" style="height: 85%; background: linear-gradient(to top, #1e3c72, #2a5298);"></div>
+                    <div class="bar" style="height: 70%; background: linear-gradient(to top, #1e3c72, #2a5298);"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-section">
+                <h4>YieldGuard</h4>
+                <p style="color: #bdc3c7; line-height: 1.6;">Professional kitchen inventory management system built for hospitality professionals.</p>
+            </div>
+            
+            <div class="footer-section">
+                <h4>Product</h4>
+                <ul>
+                    <li><a href="/inventory">Inventory Management</a></li>
+                    <li><a href="/recipes">Recipe Costing</a></li>
+                    <li><a href="/alerts">Stock Alerts</a></li>
+                    <li><a href="#features">Features</a></li>
+                </ul>
+            </div>
+            
+            <div class="footer-section">
+                <h4>Resources</h4>
+                <ul>
+                    <li><a href="#">Documentation</a></li>
+                    <li><a href="#">Support</a></li>
+                    <li><a href="#">Contact</a></li>
+                    <li><a href="#">Privacy</a></li>
+                </ul>
+            </div>
+            
+            <div class="footer-section">
+                <h4>Contact</h4>
+                <p style="color: #bdc3c7;">Northern Ireland, UK</p>
+                <p style="color: #bdc3c7; margin-top: 10px;">Built with 35 years of hospitality experience</p>
+            </div>
+        </div>
+        
+        <div class="footer-bottom">
+            <p>&copy; 2026 YieldGuard Kitchen Management. Built for chefs, by a chef.</p>
+        </div>
+    </footer>
+</body>
+</html>
