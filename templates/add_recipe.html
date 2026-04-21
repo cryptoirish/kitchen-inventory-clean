@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Recipe - YieldGuard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a202c; color: #e2e8f0; min-height: 100vh; }
+        .navbar { background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%); padding: 20px 0; box-shadow: 0 2px 20px rgba(0,0,0,0.3); border-bottom: 1px solid #27ae60; }
+        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 20px; display: flex; justify-content: space-between; align-items: center; }
+        .logo { display: flex; align-items: center; gap: 15px; text-decoration: none; }
+        .logo-icon { width: 45px; height: 45px; background: linear-gradient(135deg, #27ae60 0%, #229954 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+        .logo-text { color: #27ae60; font-size: 24px; font-weight: bold; }
+        .nav-links { display: flex; gap: 20px; align-items: center; }
+        .nav-links a { color: #e2e8f0; text-decoration: none; font-weight: 500; padding: 10px 20px; border-radius: 8px; transition: all 0.3s; border: 1px solid transparent; }
+        .nav-links a:hover { background: rgba(39, 174, 96, 0.1); border-color: #27ae60; color: #27ae60; }
+        .container { max-width: 800px; margin: 40px auto; padding: 0 20px; }
+        .form-card { background: linear-gradient(135deg, #2d3748 0%, #374151 100%); padding: 40px; border-radius: 15px; border: 1px solid #4a5568; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .form-header { margin-bottom: 30px; }
+        .form-header h1 { color: #27ae60; font-size: 32px; margin-bottom: 10px; }
+        .form-header p { color: #a0aec0; font-size: 16px; }
+        .form-group { margin-bottom: 25px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #cbd5e0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+        input, select, textarea { width: 100%; padding: 14px 16px; background: #1a202c; border: 1px solid #4a5568; border-radius: 8px; color: #e2e8f0; font-size: 15px; transition: all 0.3s; font-family: inherit; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: #27ae60; box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.1); }
+        textarea { min-height: 120px; resize: vertical; }
+        .btn { display: inline-block; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; transition: all 0.3s; cursor: pointer; border: none; }
+        .btn-primary { background: linear-gradient(135deg, #27ae60 0%, #229954 100%); color: white; box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4); }
+        .btn-secondary { background: #374151; color: #e2e8f0; border: 1px solid #4a5568; }
+        .btn-secondary:hover { background: #4a5568; }
+        .form-actions { display: flex; gap: 15px; margin-top: 35px; }
+        .helper-text { font-size: 13px; color: #a0aec0; margin-top: 5px; }
+        .info-box { background: rgba(39, 174, 96, 0.1); border: 1px solid rgba(39, 174, 96, 0.3); padding: 15px; border-radius: 8px; margin-bottom: 25px; }
+        .info-box p { color: #27ae60; font-size: 14px; line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">
+                <div class="logo-icon">🍳</div>
+                <div class="logo-text">YieldGuard</div>
+            </a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/recipes" style="color: #27ae60;">Recipes</a>
+                <a href="/alerts">Alerts</a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <div class="form-card">
+            <div class="form-header">
+                <h1>➕ Create New Recipe</h1>
+                <p>Add basic recipe information. You'll add ingredients on the next page.</p>
+            </div>
+            
+            <div class="info-box">
+                <p>💡 Tip: Create the recipe first, then you'll be able to add ingredients from your inventory and see real-time cost calculations.</p>
+            </div>
+            
+            <form method="POST">
+                <div class="form-group">
+                    <label>Recipe Name *</label>
+                    <input type="text" name="name" placeholder="e.g., Chicken Supreme, Fish & Chips" required>
+                    <p class="helper-text">The name of your dish as it appears on the menu</p>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Category *</label>
+                        <select name="category" required>
+                            <option value="">Select category...</option>
+                            <option value="Starter">Starter</option>
+                            <option value="Main">Main Course</option>
+                            <option value="Dessert">Dessert</option>
+                            <option value="Side">Side Dish</option>
+                            <option value="Beverage">Beverage</option>
+                            <option value="Special">Special</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Servings *</label>
+                        <input type="number" name="servings" value="1" min="1" required>
+                        <p class="helper-text">Number of portions this recipe makes</p>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Selling Price (£) *</label>
+                        <input type="number" name="selling_price" step="0.01" placeholder="0.00" required>
+                        <p class="helper-text">Menu price for this dish</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Portion Size</label>
+                        <input type="text" name="portion_size" placeholder="e.g., 300g, 1 plate">
+                        <p class="helper-text">Optional: serving size description</p>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Cooking Instructions</label>
+                    <textarea name="instructions" placeholder="Optional: Step-by-step cooking instructions"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea name="notes" placeholder="Optional: Allergens, dietary info, chef notes"></textarea>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Create Recipe & Add Ingredients</button>
+                    <a href="/recipes" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
