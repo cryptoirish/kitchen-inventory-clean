@@ -1,231 +1,303 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body { 
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: #1a202c;
-    color: #e2e8f0;
-    min-height: 100vh;
-}
-
-/* Navigation */
-.navbar {
-    background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
-    padding: 20px 0;
-    box-shadow: 0 2px 20px rgba(0,0,0,0.3);
-    border-bottom: 1px solid #27ae60;
-}
-
-.nav-container {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 0 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    text-decoration: none;
-}
-
-.logo-icon {
-    width: 45px;
-    height: 45px;
-    background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-}
-
-.logo-text {
-    color: #27ae60;
-    font-size: 24px;
-    font-weight: bold;
-}
-
-.nav-links {
-    display: flex;
-    gap: 20px;
-    align-items: center;
-}
-
-.nav-links a {
-    color: #e2e8f0;
-    text-decoration: none;
-    font-weight: 500;
-    padding: 10px 20px;
-    border-radius: 8px;
-    transition: all 0.3s;
-    border: 1px solid transparent;
-}
-
-.nav-links a:hover {
-    background: rgba(39, 174, 96, 0.1);
-    border-color: #27ae60;
-    color: #27ae60;
-}
-
-/* Container */
-.container {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 30px 20px;
-}
-
-/* Alert Header */
-.alert-header {
-    background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
-    padding: 40px;
-    border-radius: 15px;
-    margin-bottom: 30px;
-    text-align: center;
-    box-shadow: 0 10px 30px rgba(231, 76, 60, 0.3);
-}
-
-.alert-header h1 {
-    color: white;
-    font-size: 36px;
-    margin-bottom: 10px;
-}
-
-.alert-header p {
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 18px;
-}
-
-/* Quick Actions */
-.quick-actions {
-    display: flex;
-    gap: 15px;
-    margin-bottom: 30px;
-    flex-wrap: wrap;
-}
-
-.btn {
-    display: inline-block;
-    padding: 12px 24px;
-    border-radius: 8px;
-    text-decoration: none;
-    font-weight: 600;
-    font-size: 14px;
-    transition: all 0.3s;
-    border: none;
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
-    color: white;
-    box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
-}
-
-.btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4);
-}
-
-.btn-secondary {
-    background: #374151;
-    color: #e2e8f0;
-    border: 1px solid #4a5568;
-}
-
-.btn-secondary:hover {
-    background: #4a5568;
-}
-
-/* Table */
-.table-container {
-    background: #2d3748;
-    border-radius: 15px;
-    overflow: hidden;
-    border: 1px solid #4a5568;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-th, td {
-    padding: 18px;
-    text-align: left;
-    border-bottom: 1px solid #4a5568;
-}
-
-th {
-    background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
-    color: white;
-    font-weight: 600;
-    text-transform: uppercase;
-    font-size: 13px;
-    letter-spacing: 0.5px;
-}
-
-tbody tr {
-    background: rgba(231, 76, 60, 0.05);
-    transition: all 0.2s;
-}
-
-tbody tr:hover {
-    background: rgba(231, 76, 60, 0.1);
-}
-
-.item-name {
-    font-weight: 600;
-    color: #e74c3c;
-    font-size: 15px;
-}
-
-.shortage {
-    color: #e74c3c;
-    font-weight: bold;
-}
-
-/* Empty State */
-.success-state {
-    background: linear-gradient(135deg, #2d3748 0%, #374151 100%);
-    padding: 80px 40px;
-    text-align: center;
-    border-radius: 15px;
-    border: 2px solid #27ae60;
-}
-
-.success-icon {
-    font-size: 80px;
-    margin-bottom: 20px;
-}
-
-.success-state h2 {
-    color: #27ae60;
-    font-size: 32px;
-    margin-bottom: 15px;
-}
-
-.success-state p {
-    color: #a0aec0;
-    font-size: 18px;
-}
-
-@media (max-width: 768px) {
-    .alert-header h1 {
-        font-size: 28px;
-    }
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Low Stock Alerts - YieldGuard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a202c;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        
+        /* Navigation */
+        .navbar {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            padding: 20px 0;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.3);
+            border-bottom: 1px solid #27ae60;
+        }
+        
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            text-decoration: none;
+        }
+        
+        .logo-icon {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        
+        .logo-text {
+            color: #27ae60;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            color: #e2e8f0;
+            text-decoration: none;
+            font-weight: 500;
+            padding: 10px 20px;
+            border-radius: 8px;
+            transition: all 0.3s;
+            border: 1px solid transparent;
+        }
+        
+        .nav-links a:hover {
+            background: rgba(39, 174, 96, 0.1);
+            border-color: #27ae60;
+            color: #27ae60;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+        
+        .alert-header {
+            background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
+            padding: 40px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(231, 76, 60, 0.3);
+        }
+        
+        .alert-header h1 {
+            color: white;
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+        
+        .alert-header p {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 18px;
+        }
+        
+        .quick-actions {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s;
+            border: none;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #374151;
+            color: #e2e8f0;
+            border: 1px solid #4a5568;
+        }
+        
+        .btn-secondary:hover {
+            background: #4a5568;
+        }
+        
+        .table-container {
+            background: #2d3748;
+            border-radius: 15px;
+            overflow: hidden;
+            border: 1px solid #4a5568;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 18px;
+            text-align: left;
+            border-bottom: 1px solid #4a5568;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 13px;
+            letter-spacing: 0.5px;
+        }
+        
+        tbody tr {
+            background: rgba(231, 76, 60, 0.05);
+            transition: all 0.2s;
+        }
+        
+        tbody tr:hover {
+            background: rgba(231, 76, 60, 0.1);
+        }
+        
+        .item-name {
+            font-weight: 600;
+            color: #e74c3c;
+            font-size: 15px;
+        }
+        
+        .shortage {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        
+        .success-state {
+            background: linear-gradient(135deg, #2d3748 0%, #374151 100%);
+            padding: 80px 40px;
+            text-align: center;
+            border-radius: 15px;
+            border: 2px solid #27ae60;
+        }
+        
+        .success-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+        }
+        
+        .success-state h2 {
+            color: #27ae60;
+            font-size: 32px;
+            margin-bottom: 15px;
+        }
+        
+        .success-state p {
+            color: #a0aec0;
+            font-size: 18px;
+        }
+        
+        @media (max-width: 768px) {
+            .alert-header h1 {
+                font-size: 28px;
+            }
+            
+            table {
+                font-size: 13px;
+            }
+            
+            th, td {
+                padding: 12px 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">
+                <div class="logo-icon">🍳</div>
+                <div class="logo-text">YieldGuard</div>
+            </a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/alerts" style="color: #27ae60;">Alerts</a>
+                <a href="/add">Add Item</a>
+            </div>
+        </div>
+    </nav>
     
-    table {
-        font-size: 13px;
-    }
-    
-    th, td {
-        padding: 12px 8px;
-    }
-}
+    <div class="container">
+        <div class="alert-header">
+            <h1>⚠️ Low Stock Alerts</h1>
+            <p>Items that need immediate reordering</p>
+        </div>
+        
+        <div class="quick-actions">
+            <a href="/" class="btn btn-primary">← Back to Dashboard</a>
+            <a href="/inventory" class="btn btn-secondary">View Full Inventory</a>
+        </div>
+        
+        {% if items %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Item Name</th>
+                        <th>Category</th>
+                        <th>Current Stock</th>
+                        <th>Reorder Point</th>
+                        <th>Shortage</th>
+                        <th>Cost to Reorder</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td class="item-name">{{ item.name }}</td>
+                        <td>{{ item.category }}</td>
+                        <td>{{ item.stock }} {{ item.unit }}</td>
+                        <td>{{ item.reorder_point }} {{ item.unit }}</td>
+                        <td class="shortage">
+                            {{ "%.2f"|format(item.reorder_point - item.stock) }} {{ item.unit }}
+                        </td>
+                        <td>£{{ "%.2f"|format((item.reorder_point - item.stock) * item.cost) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="success-state">
+            <div class="success-icon">✅</div>
+            <h2>All Stock Levels Are Good!</h2>
+            <p>No items need reordering at this time. Your inventory is well-stocked.</p>
+            <div style="margin-top: 30px;">
+                <a href="/inventory" class="btn btn-primary">View Inventory</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
