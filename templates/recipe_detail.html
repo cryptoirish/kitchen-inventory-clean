@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ recipe.name }} - YieldGuard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a202c; color: #e2e8f0; min-height: 100vh; }
+        .navbar { background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%); padding: 20px 0; box-shadow: 0 2px 20px rgba(0,0,0,0.3); border-bottom: 1px solid #27ae60; }
+        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 20px; display: flex; justify-content: space-between; align-items: center; }
+        .logo { display: flex; align-items: center; gap: 15px; text-decoration: none; }
+        .logo-icon { width: 45px; height: 45px; background: linear-gradient(135deg, #27ae60 0%, #229954 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+        .logo-text { color: #27ae60; font-size: 24px; font-weight: bold; }
+        .nav-links { display: flex; gap: 20px; align-items: center; }
+        .nav-links a { color: #e2e8f0; text-decoration: none; font-weight: 500; padding: 10px 20px; border-radius: 8px; transition: all 0.3s; border: 1px solid transparent; }
+        .nav-links a:hover { background: rgba(39, 174, 96, 0.1); border-color: #27ae60; color: #27ae60; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; }
+        .page-header { background: linear-gradient(135deg, #2d3748 0%, #374151 100%); padding: 30px; border-radius: 15px; margin-bottom: 30px; border: 1px solid #4a5568; }
+        .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+        .page-header h1 { color: #27ae60; font-size: 36px; margin-bottom: 10px; }
+        .recipe-meta { display: flex; gap: 20px; margin-top: 15px; flex-wrap: wrap; }
+        .meta-badge { background: #1a202c; padding: 8px 16px; border-radius: 6px; font-size: 14px; border: 1px solid #4a5568; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background: linear-gradient(135deg, #2d3748 0%, #374151 100%); padding: 25px; border-radius: 12px; border: 1px solid #4a5568; text-align: center; }
+        .stat-value { font-size: 32px; font-weight: bold; margin-bottom: 8px; }
+        .stat-label { color: #a0aec0; font-size: 13px; text-transform: uppercase; }
+        .good { color: #27ae60; }
+        .warning { color: #f1c40f; }
+        .danger { color: #e74c3c; }
+        .section { background: #2d3748; padding: 30px; border-radius: 15px; border: 1px solid #4a5568; margin-bottom: 25px; }
+        .section h2 { color: #27ae60; font-size: 24px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #4a5568; }
+        th { background: #374151; color: #27ae60; font-weight: 600; text-transform: uppercase; font-size: 13px; }
+        tbody tr:hover { background: rgba(39, 174, 96, 0.05); }
+        .btn { display: inline-block; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; transition: all 0.3s; cursor: pointer; border: none; }
+        .btn-primary { background: linear-gradient(135deg, #27ae60 0%, #229954 100%); color: white; box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4); }
+        .btn-secondary { background: #374151; color: #e2e8f0; border: 1px solid #4a5568; }
+        .btn-danger { background: #e74c3c; color: white; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-sm { padding: 8px 16px; font-size: 13px; }
+        .add-ingredient-form { background: #374151; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .form-row { display: grid; grid-template-columns: 2fr 1fr 2fr auto; gap: 15px; align-items: end; }
+        input, select { padding: 12px; background: #1a202c; border: 1px solid #4a5568; border-radius: 6px; color: #e2e8f0; font-size: 14px; width: 100%; }
+        input:focus, select:focus { outline: none; border-color: #27ae60; }
+        label { display: block; margin-bottom: 6px; font-size: 13px; color: #cbd5e0; font-weight: 600; }
+        .empty-ingredients { text-align: center; padding: 40px; color: #a0aec0; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">
+                <div class="logo-icon">🍳</div>
+                <div class="logo-text">YieldGuard</div>
+            </a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/recipes" style="color: #27ae60;">Recipes</a>
+                <a href="/alerts">Alerts</a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <div class="page-header">
+            <div class="header-top">
+                <div>
+                    <h1>{{ recipe.name }}</h1>
+                    <div class="recipe-meta">
+                        <span class="meta-badge">📁 {{ recipe.category }}</span>
+                        <span class="meta-badge">🍽️ {{ recipe.servings }} serving(s)</span>
+                        <span class="meta-badge">💷 £{{ "%.2f"|format(recipe.selling_price) }}</span>
+                        {% if recipe.portion_size %}
+                        <span class="meta-badge">📏 {{ recipe.portion_size }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <a href="/recipes" class="btn btn-secondary">← Back to Recipes</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">£{{ "%.2f"|format(total_cost) }}</div>
+                <div class="stat-label">Total Cost</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value {% if food_cost_percent > 35 %}danger{% elif food_cost_percent > 30 %}warning{% else %}good{% endif %}">
+                    {{ "%.1f"|format(food_cost_percent) }}%
+                </div>
+                <div class="stat-label">Food Cost %</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value good">£{{ "%.2f"|format(gross_profit) }}</div>
+                <div class="stat-label">Gross Profit</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Ingredients</h2>
+            
+            <div class="add-ingredient-form">
+                <h3 style="color: #cbd5e0; margin-bottom: 15px; font-size: 16px;">Add Ingredient</h3>
+                <form method="POST" action="/recipes/{{ recipe.id }}/add-ingredient">
+                    <div class="form-row">
+                        <div>
+                            <label>Ingredient</label>
+                            <select name="item_id" required>
+                                <option value="">Select ingredient...</option>
+                                {% for item in all_items %}
+                                <option value="{{ item.id }}">{{ item.name }} (£{{ "%.2f"|format(item.cost) }}/{{ item.unit }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label>Quantity</label>
+                            <input type="number" name="quantity" step="0.01" placeholder="0.00" required>
+                        </div>
+                        <div>
+                            <label>Notes (optional)</label>
+                            <input type="text" name="notes" placeholder="e.g., diced, chopped">
+                        </div>
+                        <div>
+                            <label style="visibility: hidden;">Add</label>
+                            <button type="submit" class="btn btn-primary">Add</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            
+            {% if ingredients %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ingredient</th>
+                        <th>Quantity</th>
+                        <th>Unit Cost</th>
+                        <th>Line Cost</th>
+                        <th>Notes</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ing in ingredients %}
+                    <tr>
+                        <td><strong>{{ ing.item_name }}</strong></td>
+                        <td>{{ ing.quantity }} {{ ing.unit }}</td>
+                        <td>£{{ "%.2f"|format(ing.unit_cost) }}/{{ ing.unit }}</td>
+                        <td><strong>£{{ "%.2f"|format(ing.ingredient_cost) }}</strong></td>
+                        <td>{{ ing.notes or '-' }}</td>
+                        <td>
+                            <a href="/recipes/{{ recipe.id }}/remove-ingredient/{{ ing.id }}" 
+                               class="btn btn-danger btn-sm" 
+                               onclick="return confirm('Remove this ingredient?')">Remove</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-ingredients">
+                <p>No ingredients added yet. Use the form above to add ingredients from your inventory.</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if recipe.instructions %}
+        <div class="section">
+            <h2>Cooking Instructions</h2>
+            <p style="line-height: 1.8; white-space: pre-line;">{{ recipe.instructions }}</p>
+        </div>
+        {% endif %}
+        
+        {% if recipe.notes %}
+        <div class="section">
+            <h2>Notes</h2>
+            <p style="line-height: 1.8; white-space: pre-line;">{{ recipe.notes }}</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
