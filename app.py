@@ -8,11 +8,78 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import csv
 from io import StringIO
+import stripe
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
+
+# Stripe configuration
+stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY')
+
+# Price IDs for all plans
+PRICE_IDS = {
+    'haccp_monthly': os.environ.get('STRIPE_HACCP_MONTHLY'),
+    'haccp_yearly': os.environ.get('STRIPE_HACCP_YEARLY'),
+    'essentials_monthly': os.environ.get('STRIPE_ESSENTIALS_MONTHLY'),
+    'essentials_yearly': os.environ.get('STRIPE_ESSENTIALS_YEARLY'),
+    'complete_monthly': os.environ.get('STRIPE_COMPLETE_MONTHLY'),
+    'complete_yearly': os.environ.get('STRIPE_COMPLETE_YEARLY'),
+}
+
+# Plan details
+PLANS = {
+    'haccp': {
+        'name': 'HACCP Compliance',
+        'monthly_price': 12.99,
+        'yearly_price': 129.90,
+        'features': [
+            'Full HACCP compliance',
+            'Temperature logging',
+            'Cleaning schedules',
+            'Allergen tracking',
+            'Pest control logs',
+            'Supplier verification',
+            'Delivery inspection',
+            'Staff training records',
+            'Compliance reports',
+            'Multi-user access'
+        ]
+    },
+    'essentials': {
+        'name': 'Essentials',
+        'monthly_price': 24.99,
+        'yearly_price': 249.90,
+        'features': [
+            'Everything in HACCP',
+            'Inventory management',
+            'Recipe costing',
+            'Stock alerts',
+            'Food cost tracking',
+            'Supplier management',
+            'Wastage tracking',
+            'Export to Excel/PDF',
+            'Reorder reports'
+        ]
+    },
+    'complete': {
+        'name': 'Complete',
+        'monthly_price': 39.99,
+        'yearly_price': 399.90,
+        'features': [
+            'Everything in Essentials',
+            'Reservation management',
+            'Table management',
+            'Guest database',
+            'Online booking widget',
+            'Kitchen-to-front integration',
+            'Priority support',
+            'Advanced reports'
+        ]
+    }
+}
 
 def get_db():
     try:
@@ -22,7 +89,6 @@ def get_db():
         print(f"Database connection error: {e}")
         raise
 
-# Authentication decorator
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -32,102 +98,10 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# Get current user's organization ID
 def get_current_org_id():
     if 'organization_id' in session:
         return session['organization_id']
     return None
-
-def init_db():
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        
-        # Create organizations table
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS organizations (
-                id BIGSERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
-                email TEXT,
-                phone TEXT,
-                address TEXT,
-                subscription_tier TEXT DEFAULT 'starter',
-                subscription_status TEXT DEFAULT 'trial',
-                trial_ends_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN DEFAULT true
-            )
-        ''')
-        
-        # Create users table
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id BIGSERIAL PRIMARY KEY,
-                organization_id BIGINT REFERENCES organizations(id) ON DELETE CASCADE,
-                email TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                first_name TEXT,
-                last_name TEXT,
-                role TEXT DEFAULT 'staff',
-                is_active BOOLEAN DEFAULT true,
-                last_login TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Create items table
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS items (
-                id BIGSERIAL PRIMARY KEY,
-                organization_id BIGINT REFERENCES organizations(id) ON DELETE CASCADE,
-                name TEXT NOT NULL,
-                category TEXT,
-                stock NUMERIC DEFAULT 0,
-                reorder_point NUMERIC DEFAULT 0,
-                cost NUMERIC DEFAULT 0,
-                unit TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Create recipes table
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS recipes (
-                id BIGSERIAL PRIMARY KEY,
-                organization_id BIGINT REFERENCES organizations(id) ON DELETE CASCADE,
-                name TEXT NOT NULL,
-                category TEXT,
-                selling_price NUMERIC DEFAULT 0,
-                portion_size TEXT,
-                servings INTEGER DEFAULT 1,
-                instructions TEXT,
-                notes TEXT,
-                is_active BOOLEAN DEFAULT true,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Create recipe_ingredients table
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS recipe_ingredients (
-                id BIGSERIAL PRIMARY KEY,
-                recipe_id BIGINT REFERENCES recipes(id) ON DELETE CASCADE,
-                inventory_item_id BIGINT REFERENCES items(id) ON DELETE CASCADE,
-                quantity NUMERIC NOT NULL,
-                notes TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        conn.commit()
-        cur.close()
-        conn.close()
-        print("Database initialized successfully")
-    except Exception as e:
-        print(f"Database init error: {e}")
-        traceback.print_exc()
 
 # AUTH ROUTES
 
@@ -144,13 +118,11 @@ def login():
             user = cur.fetchone()
             
             if user and check_password_hash(user['password_hash'], password):
-                # Set session
                 session['user_id'] = user['id']
                 session['organization_id'] = user['organization_id']
                 session['user_name'] = f"{user['first_name']} {user['last_name']}"
                 session['user_role'] = user['role']
                 
-                # Update last login
                 cur.execute('UPDATE users SET last_login = %s WHERE id = %s', (datetime.now(), user['id']))
                 conn.commit()
                 
@@ -176,7 +148,6 @@ def register():
             conn = get_db()
             cur = conn.cursor()
             
-            # Create organization
             cur.execute('''
                 INSERT INTO organizations (name, email, subscription_tier, subscription_status)
                 VALUES (%s, %s, %s, %s)
@@ -189,7 +160,6 @@ def register():
             ))
             org_id = cur.fetchone()['id']
             
-            # Create user
             password_hash = generate_password_hash(request.form['password'])
             cur.execute('''
                 INSERT INTO users (organization_id, email, password_hash, first_name, last_name, role)
@@ -203,7 +173,6 @@ def register():
                 request.form['last_name'],
                 'owner'
             ))
-            user_id = cur.fetchone()['id']
             
             conn.commit()
             cur.close()
@@ -228,11 +197,9 @@ def logout():
 
 @app.route('/')
 def home():
-    # If not logged in, show public landing page
     if 'user_id' not in session:
         return render_template('landing.html')
     
-    # If logged in, show dashboard
     try:
         org_id = get_current_org_id()
         conn = get_db()
@@ -248,7 +215,6 @@ def home():
         result = cur.fetchone()
         total_value = result['total_value'] if result['total_value'] else 0
         
-        # Get recipe count
         cur.execute('SELECT COUNT(*) as total_recipes FROM recipes WHERE organization_id = %s', (org_id,))
         total_recipes = cur.fetchone()['total_recipes']
         
@@ -316,6 +282,63 @@ def inventory():
         traceback.print_exc()
         return f"Error loading inventory: {str(e)}", 500
 
+@app.route('/inventory/export')
+@login_required
+def export_inventory():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        
+        cur.execute('''
+            SELECT name, category, stock, unit, reorder_point, cost, 
+                   (stock * cost) as total_value,
+                   CASE 
+                       WHEN stock <= reorder_point THEN 'REORDER NOW'
+                       WHEN stock <= reorder_point * 1.5 THEN 'Low Stock'
+                       ELSE 'Good'
+                   END as status
+            FROM items 
+            WHERE organization_id = %s 
+            ORDER BY category, name
+        ''', (org_id,))
+        
+        items = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        writer.writerow([
+            'Item Name', 'Category', 'Current Stock', 'Unit', 
+            'Reorder Point', 'Cost per Unit', 'Total Value', 'Status'
+        ])
+        
+        for item in items:
+            writer.writerow([
+                item['name'],
+                item['category'],
+                f"{item['stock']:.2f}",
+                item['unit'],
+                f"{item['reorder_point']:.2f}",
+                f"£{item['cost']:.2f}",
+                f"£{item['total_value']:.2f}",
+                item['status']
+            ])
+        
+        output.seek(0)
+        response = make_response(output.getvalue())
+        response.headers['Content-Disposition'] = 'attachment; filename=inventory_export.csv'
+        response.headers['Content-Type'] = 'text/csv'
+        
+        return response
+        
+    except Exception as e:
+        print(f"Export error: {e}")
+        flash('Error exporting inventory', 'danger')
+        return redirect('/inventory')
+
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
 def add():
@@ -354,7 +377,6 @@ def update(id):
         org_id = get_current_org_id()
         conn = get_db()
         cur = conn.cursor()
-        # Security: Make sure item belongs to user's organization
         cur.execute('UPDATE items SET stock = %s, updated_at = %s WHERE id = %s AND organization_id = %s', 
                     (request.form['stock'], datetime.now(), id, org_id))
         conn.commit()
@@ -545,7 +567,6 @@ def add_ingredient_to_recipe(recipe_id):
         conn = get_db()
         cur = conn.cursor()
         
-        # Verify recipe belongs to user's org
         cur.execute('SELECT id FROM recipes WHERE id = %s AND organization_id = %s', (recipe_id, org_id))
         if not cur.fetchone():
             flash('Recipe not found', 'danger')
@@ -604,67 +625,152 @@ def delete_recipe(id):
         print(f"Delete recipe error: {e}")
         flash('Error deleting recipe', 'danger')
         return redirect('/recipes')
-@app.route('/inventory/export')
+
+# BILLING ROUTES
+
+@app.route('/billing')
 @login_required
-def export_inventory():
+def billing():
     try:
         org_id = get_current_org_id()
         conn = get_db()
         cur = conn.cursor()
-        
-        cur.execute('''
-            SELECT name, category, stock, unit, reorder_point, cost, 
-                   (stock * cost) as total_value,
-                   CASE 
-                       WHEN stock <= reorder_point THEN 'REORDER NOW'
-                       WHEN stock <= reorder_point * 1.5 THEN 'Low Stock'
-                       ELSE 'Good'
-                   END as status
-            FROM items 
-            WHERE organization_id = %s 
-            ORDER BY category, name
-        ''', (org_id,))
-        
-        items = cur.fetchall()
+        cur.execute('SELECT * FROM organizations WHERE id = %s', (org_id,))
+        org = cur.fetchone()
         cur.close()
         conn.close()
         
-        # Create CSV
-        output = StringIO()
-        writer = csv.writer(output)
+        return render_template('billing.html', 
+                             org=org,
+                             plans=PLANS,
+                             stripe_key=STRIPE_PUBLISHABLE_KEY)
+    except Exception as e:
+        print(f"Billing error: {e}")
+        flash('Error loading billing information', 'danger')
+        return redirect('/')
+
+@app.route('/create-checkout-session', methods=['POST'])
+@login_required
+def create_checkout_session():
+    try:
+        org_id = get_current_org_id()
+        plan = request.form.get('plan', 'haccp')
+        billing_cycle = request.form.get('billing_cycle', 'monthly')
         
-        # Header
-        writer.writerow([
-            'Item Name', 'Category', 'Current Stock', 'Unit', 
-            'Reorder Point', 'Cost per Unit', 'Total Value', 'Status'
-        ])
+        price_key = f'{plan}_{billing_cycle}'
+        price_id = PRICE_IDS.get(price_key)
         
-        # Data rows
-        for item in items:
-            writer.writerow([
-                item['name'],
-                item['category'],
-                f"{item['stock']:.2f}",
-                item['unit'],
-                f"{item['reorder_point']:.2f}",
-                f"£{item['cost']:.2f}",
-                f"£{item['total_value']:.2f}",
-                item['status']
-            ])
+        if not price_id:
+            flash('Invalid plan selection', 'danger')
+            return redirect('/billing')
         
-        # Create response
-        from flask import make_response
-        output.seek(0)
-        response = make_response(output.getvalue())
-        response.headers['Content-Disposition'] = 'attachment; filename=inventory_export.csv'
-        response.headers['Content-Type'] = 'text/csv'
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT email FROM organizations WHERE id = %s', (org_id,))
+        org = cur.fetchone()
+        cur.close()
+        conn.close()
         
-        return response
+        checkout_session = stripe.checkout.Session.create(
+            customer_email=org['email'],
+            payment_method_types=['card'],
+            line_items=[{
+                'price': price_id,
+                'quantity': 1,
+            }],
+            mode='subscription',
+            success_url=request.host_url + 'billing/success?session_id={CHECKOUT_SESSION_ID}&plan=' + plan + '&cycle=' + billing_cycle,
+            cancel_url=request.host_url + 'billing',
+            metadata={
+                'organization_id': str(org_id),
+                'plan': plan,
+                'billing_cycle': billing_cycle
+            },
+            subscription_data={
+                'trial_period_days': 14,
+                'metadata': {
+                    'organization_id': str(org_id)
+                }
+            }
+        )
+        
+        return redirect(checkout_session.url, code=303)
         
     except Exception as e:
-        print(f"Export error: {e}")
-        flash('Error exporting inventory', 'danger')
-        return redirect('/inventory')
+        print(f"Checkout error: {e}")
+        traceback.print_exc()
+        flash(f'Error creating checkout session: {str(e)}', 'danger')
+        return redirect('/billing')
+
+@app.route('/billing/success')
+@login_required
+def billing_success():
+    try:
+        session_id = request.args.get('session_id')
+        plan = request.args.get('plan', 'haccp')
+        cycle = request.args.get('cycle', 'monthly')
+        
+        if session_id:
+            checkout_session = stripe.checkout.Session.retrieve(session_id)
+            
+            org_id = get_current_org_id()
+            conn = get_db()
+            cur = conn.cursor()
+            
+            cur.execute('''
+                UPDATE organizations 
+                SET stripe_customer_id = %s,
+                    stripe_subscription_id = %s,
+                    subscription_plan = %s,
+                    subscription_status = 'active'
+                WHERE id = %s
+            ''', (
+                checkout_session.customer,
+                checkout_session.subscription,
+                plan,
+                org_id
+            ))
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            flash(f'🎉 Welcome aboard! Your {PLANS[plan]["name"]} plan is now active. Your 14-day free trial has started.', 'success')
+        
+        return redirect('/billing')
+        
+    except Exception as e:
+        print(f"Success handler error: {e}")
+        flash('Subscription created but there was an error updating your account. Please contact support.', 'warning')
+        return redirect('/billing')
+
+@app.route('/billing/portal')
+@login_required
+def billing_portal():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT stripe_customer_id FROM organizations WHERE id = %s', (org_id,))
+        org = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if not org['stripe_customer_id']:
+            flash('No active subscription found', 'warning')
+            return redirect('/billing')
+        
+        portal_session = stripe.billing_portal.Session.create(
+            customer=org['stripe_customer_id'],
+            return_url=request.host_url + 'billing',
+        )
+        
+        return redirect(portal_session.url, code=303)
+        
+    except Exception as e:
+        print(f"Portal error: {e}")
+        flash('Error accessing billing portal', 'danger')
+        return redirect('/billing')
+
 if __name__ == '__main__':
-    init_db()
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
