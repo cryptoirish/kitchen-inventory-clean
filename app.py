@@ -226,8 +226,12 @@ def logout():
 # MAIN ROUTES
 
 @app.route('/')
-@login_required
 def home():
+    # If not logged in, show public landing page
+    if 'user_id' not in session:
+        return render_template('landing.html')
+    
+    # If logged in, show dashboard
     try:
         org_id = get_current_org_id()
         conn = get_db()
@@ -243,19 +247,25 @@ def home():
         result = cur.fetchone()
         total_value = result['total_value'] if result['total_value'] else 0
         
+        # Get recipe count
+        cur.execute('SELECT COUNT(*) as total_recipes FROM recipes WHERE organization_id = %s', (org_id,))
+        total_recipes = cur.fetchone()['total_recipes']
+        
         cur.close()
         conn.close()
         
-        return render_template('home.html', 
+        return render_template('dashboard.html', 
                              total_items=total_items,
                              low_stock_count=low_stock_count,
-                             total_value=float(total_value))
+                             total_value=float(total_value),
+                             total_recipes=total_recipes)
     except Exception as e:
-        print(f"Home page error: {e}")
-        return render_template('home.html', 
+        print(f"Dashboard error: {e}")
+        return render_template('dashboard.html', 
                              total_items=0,
                              low_stock_count=0,
-                             total_value=0)
+                             total_value=0,
+                             total_recipes=0)
 
 @app.route('/inventory')
 @login_required
