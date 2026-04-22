@@ -150,8 +150,10 @@
         {% else %}
         <div class="empty-state">
             <p>📭 No items found</p>
-            <a href="/add" class="btn btn-primary">Add your first item</a>
-        </div>
+            <div style="display: flex; gap: 10px;">
+    <a href="/inventory/export" class="btn btn-secondary" style="background: #374151;">📥 Export to Excel</a>
+    <a href="/add" class="btn btn-primary">+ Add New Item</a>
+</div>
         {% endif %}
     </div>
 </body>
