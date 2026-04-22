@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>YieldGuard - Professional Kitchen Inventory Management</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a202c;
+            color: #e2e8f0;
+        }
+        .hero {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #27ae60 100%);
+            color: white;
+            padding: 100px 20px;
+            text-align: center;
+        }
+        .hero h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .hero p {
+            font-size: 20px;
+            margin-bottom: 40px;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .btn {
+            display: inline-block;
+            padding: 15px 35px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 16px;
+            margin: 10px;
+        }
+        .btn-primary {
+            background: #27ae60;
+            color: white;
+        }
+        .btn-secondary {
+            background: white;
+            color: #1e3c72;
+        }
+        .features {
+            padding: 80px 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .features h2 {
+            text-align: center;
+            font-size: 36px;
+            margin-bottom: 60px;
+            color: #27ae60;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+        }
+        .feature-card {
+            background: #2d3748;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+        }
+        .feature-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+        .feature-card h3 {
+            color: #27ae60;
+            margin-bottom: 15px;
+        }
+        .pricing {
+            background: #2d3748;
+            padding: 80px 20px;
+            text-align: center;
+        }
+        .pricing h2 {
+            font-size: 36px;
+            margin-bottom: 20px;
+            color: #27ae60;
+        }
+        .price {
+            font-size: 64px;
+            font-weight: bold;
+            color: #27ae60;
+            margin: 30px 0;
+        }
+    </style>
+</head>
+<body>
+    <section class="hero">
+        <h1>Professional Kitchen Management</h1>
+        <p>Control inventory, calculate recipe costs, and maximize profits with real-time tracking built for hospitality professionals</p>
+        <a href="/register" class="btn btn-primary">Start Free Trial</a>
+        <a href="/login" class="btn btn-secondary">Sign In</a>
+    </section>
+    
+    <section class="features">
+        <h2>Everything You Need to Run a Profitable Kitchen</h2>
+        
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>Real-Time Inventory Tracking</h3>
+                <p>Never run out of critical ingredients. Get automatic reorder alerts.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🍽️</div>
+                <h3>Automatic Recipe Costing</h3>
+                <p>Know exactly what each dish costs. Update instantly when prices change.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">💰</div>
+                <h3>Profit Optimization</h3>
+                <p>See food cost % and profit margins for every menu item.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">📱</div>
+                <h3>Mobile Access</h3>
+                <p>Update inventory from anywhere. Perfect for stock checks and deliveries.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">📋</div>
+                <h3>HACCP Ready</h3>
+                <p>Track temperatures, logs, and maintain compliance in one place.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">📈</div>
+                <h3>Smart Reports</h3>
+                <p>Export to Excel, generate shopping lists, analyze trends.</p>
+            </div>
+        </div>
+    </section>
+    
+    <section class="pricing">
+        <h2>Simple, Transparent Pricing</h2>
+        <div class="price">£99<span style="font-size: 24px; color: #a0aec0;">/month</span></div>
+        <p style="color: #a0aec0; margin-bottom: 30px;">14-day free trial • No credit card required</p>
+        <a href="/register" class="btn btn-primary" style="font-size: 20px; padding: 20px 50px;">Start Your Free Trial</a>
+    </section>
+</body>
+</html>
