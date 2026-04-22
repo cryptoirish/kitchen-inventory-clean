@@ -19,7 +19,6 @@ DATABASE_URL = os.environ.get('DATABASE_URL')
 stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
 STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY')
 
-# Price IDs for all plans
 PRICE_IDS = {
     'haccp_monthly': os.environ.get('STRIPE_HACCP_MONTHLY'),
     'haccp_yearly': os.environ.get('STRIPE_HACCP_YEARLY'),
@@ -29,7 +28,6 @@ PRICE_IDS = {
     'complete_yearly': os.environ.get('STRIPE_COMPLETE_YEARLY'),
 }
 
-# Plan details
 PLANS = {
     'haccp': {
         'name': 'HACCP Compliance',
@@ -103,8 +101,6 @@ def get_current_org_id():
         return session['organization_id']
     return None
 
-# AUTH ROUTES
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -125,7 +121,6 @@ def login():
                 
                 cur.execute('UPDATE users SET last_login = %s WHERE id = %s', (datetime.now(), user['id']))
                 conn.commit()
-                
                 cur.close()
                 conn.close()
                 
@@ -193,8 +188,6 @@ def logout():
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
 
-# MAIN ROUTES
-
 @app.route('/')
 def home():
     if 'user_id' not in session:
@@ -205,7 +198,6 @@ def home():
         conn = get_db()
         cur = conn.cursor()
         
-        # Get organization info
         cur.execute('SELECT * FROM organizations WHERE id = %s', (org_id,))
         org = cur.fetchone()
         
@@ -240,6 +232,7 @@ def home():
                              low_stock_count=0,
                              total_value=0,
                              total_recipes=0)
+
 @app.route('/inventory')
 @login_required
 def inventory():
@@ -316,10 +309,7 @@ def export_inventory():
         output = StringIO()
         writer = csv.writer(output)
         
-        writer.writerow([
-            'Item Name', 'Category', 'Current Stock', 'Unit', 
-            'Reorder Point', 'Cost per Unit', 'Total Value', 'Status'
-        ])
+        writer.writerow(['Item Name', 'Category', 'Current Stock', 'Unit', 'Reorder Point', 'Cost per Unit', 'Total Value', 'Status'])
         
         for item in items:
             writer.writerow([
@@ -420,11 +410,7 @@ def alerts():
         org_id = get_current_org_id()
         conn = get_db()
         cur = conn.cursor()
-        cur.execute('''
-            SELECT * FROM items 
-            WHERE organization_id = %s AND stock <= reorder_point 
-            ORDER BY stock ASC
-        ''', (org_id,))
+        cur.execute('SELECT * FROM items WHERE organization_id = %s AND stock <= reorder_point ORDER BY stock ASC', (org_id,))
         low_stock = cur.fetchall()
         cur.close()
         conn.close()
@@ -432,8 +418,6 @@ def alerts():
     except Exception as e:
         print(f"Alerts error: {e}")
         return f"Error loading alerts: {str(e)}", 500
-
-# RECIPE ROUTES
 
 @app.route('/recipes')
 @login_required
@@ -444,10 +428,7 @@ def recipes():
         cur = conn.cursor()
         
         cur.execute('''
-            SELECT 
-                r.*,
-                COALESCE(SUM(ri.quantity * i.cost), 0) as total_cost,
-                COUNT(ri.id) as ingredient_count
+            SELECT r.*, COALESCE(SUM(ri.quantity * i.cost), 0) as total_cost, COUNT(ri.id) as ingredient_count
             FROM recipes r
             LEFT JOIN recipe_ingredients ri ON r.id = ri.recipe_id
             LEFT JOIN items i ON ri.inventory_item_id = i.id
@@ -467,11 +448,9 @@ def recipes():
         
         cur.close()
         conn.close()
-        
         return render_template('recipes.html', recipes=recipes_list)
     except Exception as e:
         print(f"Recipes error: {e}")
-        traceback.print_exc()
         return f"Error loading recipes: {str(e)}", 500
 
 @app.route('/recipes/add', methods=['GET', 'POST'])
@@ -501,12 +480,10 @@ def add_recipe():
             conn.commit()
             cur.close()
             conn.close()
-            flash('Recipe created successfully!', 'success')
             return redirect(f'/recipes/{recipe_id}')
         except Exception as e:
             print(f"Add recipe error: {e}")
             flash('Error creating recipe', 'danger')
-    
     return render_template('add_recipe.html')
 
 @app.route('/recipes/<int:id>')
@@ -521,16 +498,10 @@ def recipe_detail(id):
         recipe = cur.fetchone()
         
         if not recipe:
-            flash('Recipe not found', 'danger')
             return redirect('/recipes')
         
         cur.execute('''
-            SELECT 
-                ri.*,
-                i.name as item_name,
-                i.unit,
-                i.cost as unit_cost,
-                (ri.quantity * i.cost) as ingredient_cost
+            SELECT ri.*, i.name as item_name, i.unit, i.cost as unit_cost, (ri.quantity * i.cost) as ingredient_cost
             FROM recipe_ingredients ri
             JOIN items i ON ri.inventory_item_id = i.id
             WHERE ri.recipe_id = %s
@@ -561,8 +532,6 @@ def recipe_detail(id):
                              all_items=all_items)
     except Exception as e:
         print(f"Recipe detail error: {e}")
-        traceback.print_exc()
-        flash('Error loading recipe', 'danger')
         return redirect('/recipes')
 
 @app.route('/recipes/<int:recipe_id>/add-ingredient', methods=['POST'])
@@ -575,26 +544,18 @@ def add_ingredient_to_recipe(recipe_id):
         
         cur.execute('SELECT id FROM recipes WHERE id = %s AND organization_id = %s', (recipe_id, org_id))
         if not cur.fetchone():
-            flash('Recipe not found', 'danger')
             return redirect('/recipes')
         
         cur.execute('''
             INSERT INTO recipe_ingredients (recipe_id, inventory_item_id, quantity, notes)
             VALUES (%s, %s, %s, %s)
-        ''', (
-            recipe_id,
-            request.form['item_id'],
-            request.form['quantity'],
-            request.form.get('notes', '')
-        ))
+        ''', (recipe_id, request.form['item_id'], request.form['quantity'], request.form.get('notes', '')))
         conn.commit()
         cur.close()
         conn.close()
-        flash('Ingredient added!', 'success')
         return redirect(f'/recipes/{recipe_id}')
     except Exception as e:
         print(f"Add ingredient error: {e}")
-        flash('Error adding ingredient', 'danger')
         return redirect(f'/recipes/{recipe_id}')
 
 @app.route('/recipes/<int:recipe_id>/remove-ingredient/<int:ingredient_id>')
@@ -607,11 +568,8 @@ def remove_ingredient(recipe_id, ingredient_id):
         conn.commit()
         cur.close()
         conn.close()
-        flash('Ingredient removed!', 'success')
         return redirect(f'/recipes/{recipe_id}')
     except Exception as e:
-        print(f"Remove ingredient error: {e}")
-        flash('Error removing ingredient', 'danger')
         return redirect(f'/recipes/{recipe_id}')
 
 @app.route('/recipes/delete/<int:id>')
@@ -625,14 +583,9 @@ def delete_recipe(id):
         conn.commit()
         cur.close()
         conn.close()
-        flash('Recipe deleted!', 'success')
         return redirect('/recipes')
     except Exception as e:
-        print(f"Delete recipe error: {e}")
-        flash('Error deleting recipe', 'danger')
         return redirect('/recipes')
-
-# BILLING ROUTES
 
 @app.route('/billing')
 @login_required
@@ -646,12 +599,10 @@ def billing():
         cur.close()
         conn.close()
         
-        return render_template('billing.html', 
-                             org=org,
-                             plans=PLANS,
-                             stripe_key=STRIPE_PUBLISHABLE_KEY)
+        return render_template('billing.html', org=org, plans=PLANS, stripe_key=STRIPE_PUBLISHABLE_KEY)
     except Exception as e:
         print(f"Billing error: {e}")
+        traceback.print_exc()
         flash('Error loading billing information', 'danger')
         return redirect('/')
 
@@ -680,32 +631,19 @@ def create_checkout_session():
         checkout_session = stripe.checkout.Session.create(
             customer_email=org['email'],
             payment_method_types=['card'],
-            line_items=[{
-                'price': price_id,
-                'quantity': 1,
-            }],
+            line_items=[{'price': price_id, 'quantity': 1}],
             mode='subscription',
-            success_url=request.host_url + 'billing/success?session_id={CHECKOUT_SESSION_ID}&plan=' + plan + '&cycle=' + billing_cycle,
+            success_url=request.host_url + 'billing/success?session_id={CHECKOUT_SESSION_ID}&plan=' + plan,
             cancel_url=request.host_url + 'billing',
-            metadata={
-                'organization_id': str(org_id),
-                'plan': plan,
-                'billing_cycle': billing_cycle
-            },
-            subscription_data={
-                'trial_period_days': 14,
-                'metadata': {
-                    'organization_id': str(org_id)
-                }
-            }
+            metadata={'organization_id': str(org_id), 'plan': plan},
+            subscription_data={'trial_period_days': 14, 'metadata': {'organization_id': str(org_id)}}
         )
         
         return redirect(checkout_session.url, code=303)
-        
     except Exception as e:
         print(f"Checkout error: {e}")
         traceback.print_exc()
-        flash(f'Error creating checkout session: {str(e)}', 'danger')
+        flash(f'Error: {str(e)}', 'danger')
         return redirect('/billing')
 
 @app.route('/billing/success')
@@ -714,40 +652,24 @@ def billing_success():
     try:
         session_id = request.args.get('session_id')
         plan = request.args.get('plan', 'haccp')
-        cycle = request.args.get('cycle', 'monthly')
         
         if session_id:
             checkout_session = stripe.checkout.Session.retrieve(session_id)
-            
             org_id = get_current_org_id()
             conn = get_db()
             cur = conn.cursor()
-            
             cur.execute('''
                 UPDATE organizations 
-                SET stripe_customer_id = %s,
-                    stripe_subscription_id = %s,
-                    subscription_plan = %s,
-                    subscription_status = 'active'
+                SET stripe_customer_id = %s, stripe_subscription_id = %s, subscription_plan = %s, subscription_status = 'active'
                 WHERE id = %s
-            ''', (
-                checkout_session.customer,
-                checkout_session.subscription,
-                plan,
-                org_id
-            ))
-            
+            ''', (checkout_session.customer, checkout_session.subscription, plan, org_id))
             conn.commit()
             cur.close()
             conn.close()
-            
-            flash(f'🎉 Welcome aboard! Your {PLANS[plan]["name"]} plan is now active. Your 14-day free trial has started.', 'success')
-        
+            flash(f'🎉 Welcome! Your {PLANS[plan]["name"]} plan is active. 14-day free trial started.', 'success')
         return redirect('/billing')
-        
     except Exception as e:
-        print(f"Success handler error: {e}")
-        flash('Subscription created but there was an error updating your account. Please contact support.', 'warning')
+        print(f"Success error: {e}")
         return redirect('/billing')
 
 @app.route('/billing/portal')
@@ -770,12 +692,9 @@ def billing_portal():
             customer=org['stripe_customer_id'],
             return_url=request.host_url + 'billing',
         )
-        
         return redirect(portal_session.url, code=303)
-        
     except Exception as e:
         print(f"Portal error: {e}")
-        flash('Error accessing billing portal', 'danger')
         return redirect('/billing')
 
 if __name__ == '__main__':
