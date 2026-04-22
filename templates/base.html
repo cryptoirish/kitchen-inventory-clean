@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}YieldGuard{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a202c;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        
+        /* Navigation */
+        .navbar {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            padding: 20px 0;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.3);
+            border-bottom: 1px solid #27ae60;
+        }
+        
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            text-decoration: none;
+        }
+        
+        .logo-icon {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        
+        .logo-text {
+            color: #27ae60;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .nav-center {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .nav-center a {
+            color: #e2e8f0;
+            text-decoration: none;
+            font-weight: 500;
+            padding: 10px 20px;
+            border-radius: 8px;
+            transition: all 0.3s;
+            border: 1px solid transparent;
+        }
+        
+        .nav-center a:hover, .nav-center a.active {
+            background: rgba(39, 174, 96, 0.1);
+            border-color: #27ae60;
+            color: #27ae60;
+        }
+        
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .user-info {
+            color: #a0aec0;
+            font-size: 14px;
+            padding-right: 15px;
+            border-right: 1px solid #4a5568;
+        }
+        
+        .user-name {
+            color: #27ae60;
+            font-weight: 600;
+        }
+        
+        .btn-logout {
+            padding: 8px 16px;
+            background: #374151;
+            color: #e2e8f0;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            border: 1px solid #4a5568;
+        }
+        
+        .btn-logout:hover {
+            background: #e74c3c;
+            border-color: #e74c3c;
+        }
+        
+        {% block extra_css %}{% endblock %}
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">
+                <div class="logo-icon">🍳</div>
+                <div class="logo-text">YieldGuard</div>
+            </a>
+            
+            <div class="nav-center">
+                <a href="/" {% if request.path == '/' %}class="active"{% endif %}>Dashboard</a>
+                <a href="/inventory" {% if '/inventory' in request.path %}class="active"{% endif %}>Inventory</a>
+                <a href="/recipes" {% if '/recipes' in request.path %}class="active"{% endif %}>Recipes</a>
+                <a href="/alerts" {% if request.path == '/alerts' %}class="active"{% endif %}>Alerts</a>
+            </div>
+            
+            <div class="nav-right">
+                <div class="user-info">
+                    👋 <span class="user-name">{{ session.user_name }}</span>
+                </div>
+                <a href="/logout" class="btn-logout">Logout</a>
+            </div>
+        </div>
+    </nav>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div style="max-width: 1400px; margin: 20px auto; padding: 0 20px;">
+            {% for category, message in messages %}
+            <div style="padding: 12px 20px; border-radius: 8px; margin-bottom: 15px; 
+                {% if category == 'success' %}background: rgba(39, 174, 96, 0.2); border: 1px solid rgba(39, 174, 96, 0.3); color: #27ae60;
+                {% elif category == 'danger' %}background: rgba(231, 76, 60, 0.2); border: 1px solid rgba(231, 76, 60, 0.3); color: #e74c3c;
+                {% elif category == 'warning' %}background: rgba(241, 196, 15, 0.2); border: 1px solid rgba(241, 196, 15, 0.3); color: #f1c40f;
+                {% else %}background: rgba(52, 152, 219, 0.2); border: 1px solid rgba(52, 152, 219, 0.3); color: #3498db;{% endif %}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
+    
+    {% block content %}{% endblock %}
+</body>
+</html>
