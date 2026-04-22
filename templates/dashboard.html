@@ -1,0 +1,269 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - YieldGuard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 30px 20px;
+    }
+    
+    .page-header {
+        margin-bottom: 40px;
+    }
+    
+    .page-header h1 {
+        color: #27ae60;
+        font-size: 36px;
+        margin-bottom: 10px;
+    }
+    
+    .page-subtitle {
+        color: #a0aec0;
+        font-size: 16px;
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 25px;
+        margin-bottom: 40px;
+    }
+    
+    .stat-card {
+        background: linear-gradient(135deg, #2d3748 0%, #374151 100%);
+        padding: 30px;
+        border-radius: 15px;
+        border: 1px solid #4a5568;
+        transition: all 0.3s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(39, 174, 96, 0.2);
+        border-color: #27ae60;
+    }
+    
+    .stat-icon {
+        font-size: 40px;
+        margin-bottom: 15px;
+    }
+    
+    .stat-number {
+        font-size: 42px;
+        font-weight: bold;
+        color: #27ae60;
+        margin: 10px 0;
+    }
+    
+    .stat-label {
+        color: #a0aec0;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 600;
+    }
+    
+    .stat-change {
+        margin-top: 10px;
+        font-size: 13px;
+        color: #27ae60;
+        font-weight: 600;
+    }
+    
+    .quick-actions {
+        background: linear-gradient(135deg, #2d3748 0%, #374151 100%);
+        padding: 30px;
+        border-radius: 15px;
+        border: 1px solid #4a5568;
+        margin-bottom: 40px;
+    }
+    
+    .quick-actions h2 {
+        color: #27ae60;
+        font-size: 24px;
+        margin-bottom: 20px;
+    }
+    
+    .action-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 15px;
+    }
+    
+    .action-btn {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 20px;
+        background: #1a202c;
+        border: 1px solid #4a5568;
+        border-radius: 10px;
+        text-decoration: none;
+        color: #e2e8f0;
+        transition: all 0.3s;
+    }
+    
+    .action-btn:hover {
+        border-color: #27ae60;
+        background: rgba(39, 174, 96, 0.1);
+    }
+    
+    .action-icon {
+        font-size: 32px;
+    }
+    
+    .action-text h3 {
+        color: #e2e8f0;
+        font-size: 16px;
+        margin-bottom: 5px;
+    }
+    
+    .action-text p {
+        color: #a0aec0;
+        font-size: 13px;
+    }
+    
+    .recent-section {
+        background: linear-gradient(135deg, #2d3748 0%, #374151 100%);
+        padding: 30px;
+        border-radius: 15px;
+        border: 1px solid #4a5568;
+    }
+    
+    .recent-section h2 {
+        color: #27ae60;
+        font-size: 24px;
+        margin-bottom: 20px;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #a0aec0;
+    }
+    
+    .empty-state-icon {
+        font-size: 64px;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1>📊 Dashboard</h1>
+        <p class="page-subtitle">Welcome back! Here's what's happening in your kitchen.</p>
+    </div>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">📦</div>
+            <div class="stat-number">{{ total_items }}</div>
+            <div class="stat-label">Inventory Items</div>
+            <div class="stat-change">↗ Total active items</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">🍽️</div>
+            <div class="stat-number">{{ total_recipes }}</div>
+            <div class="stat-label">Recipes</div>
+            <div class="stat-change">↗ Menu items tracked</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">⚠️</div>
+            <div class="stat-number" style="color: {% if low_stock_count > 0 %}#e74c3c{% else %}#27ae60{% endif %}">
+                {{ low_stock_count }}
+            </div>
+            <div class="stat-label">Low Stock Alerts</div>
+            {% if low_stock_count > 0 %}
+            <div class="stat-change" style="color: #e74c3c;">⚠ Needs attention</div>
+            {% else %}
+            <div class="stat-change">✓ All good</div>
+            {% endif %}
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">💰</div>
+            <div class="stat-number">£{{ "%.0f"|format(total_value) }}</div>
+            <div class="stat-label">Inventory Value</div>
+            <div class="stat-change">↗ Current stock worth</div>
+        </div>
+    </div>
+    
+    <div class="quick-actions">
+        <h2>Quick Actions</h2>
+        <div class="action-grid">
+            <a href="/add" class="action-btn">
+                <div class="action-icon">➕</div>
+                <div class="action-text">
+                    <h3>Add Inventory Item</h3>
+                    <p>Add new stock to inventory</p>
+                </div>
+            </a>
+            
+            <a href="/recipes/add" class="action-btn">
+                <div class="action-icon">🍳</div>
+                <div class="action-text">
+                    <h3>Create Recipe</h3>
+                    <p>Add a new dish to your menu</p>
+                </div>
+            </a>
+            
+            <a href="/inventory" class="action-btn">
+                <div class="action-icon">📋</div>
+                <div class="action-text">
+                    <h3>View All Inventory</h3>
+                    <p>Manage your stock levels</p>
+                </div>
+            </a>
+            
+            {% if low_stock_count > 0 %}
+            <a href="/alerts" class="action-btn" style="border-color: #e74c3c;">
+                <div class="action-icon">🔔</div>
+                <div class="action-text">
+                    <h3>Check Alerts</h3>
+                    <p style="color: #e74c3c;">{{ low_stock_count }} items need reordering</p>
+                </div>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    
+    {% if total_items == 0 %}
+    <div class="recent-section">
+        <div class="empty-state">
+            <div class="empty-state-icon">🚀</div>
+            <h2 style="color: #27ae60; margin-bottom: 15px;">Get Started with YieldGuard</h2>
+            <p style="margin-bottom: 30px; font-size: 16px;">Start by adding some inventory items, then create recipes to track your food costs.</p>
+            <a href="/add" style="display: inline-block; padding: 12px 30px; background: linear-gradient(135deg, #27ae60 0%, #229954 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Add Your First Item</a>
+        </div>
+    </div>
+    {% else %}
+    <div class="recent-section">
+        <h2>💡 Pro Tips</h2>
+        <div style="display: grid; gap: 15px;">
+            <div style="padding: 15px; background: rgba(39, 174, 96, 0.1); border-left: 3px solid #27ae60; border-radius: 8px;">
+                <strong style="color: #27ae60;">💰 Keep food costs below 30%</strong>
+                <p style="color: #a0aec0; margin-top: 5px; font-size: 14px;">Check your recipes regularly to ensure you're maintaining healthy profit margins.</p>
+            </div>
+            
+            <div style="padding: 15px; background: rgba(39, 174, 96, 0.1); border-left: 3px solid #27ae60; border-radius: 8px;">
+                <strong style="color: #27ae60;">📊 Export your data</strong>
+                <p style="color: #a0aec0; margin-top: 5px; font-size: 14px;">Use the export button in Inventory to download Excel reports for your accountant.</p>
+            </div>
+            
+            <div style="padding: 15px; background: rgba(39, 174, 96, 0.1); border-left: 3px solid #27ae60; border-radius: 8px;">
+                <strong style="color: #27ae60;">🔄 Update costs regularly</strong>
+                <p style="color: #a0aec0; margin-top: 5px; font-size: 14px;">When supplier prices change, update your ingredient costs and watch recipe costs update automatically.</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
