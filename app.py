@@ -1,11 +1,14 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, flash, session
 import psycopg
 from psycopg.rows import dict_row
 import os
 import traceback
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
@@ -17,15 +20,64 @@ def get_db():
         print(f"Database connection error: {e}")
         raise
 
+# Authentication decorator
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Please log in to access this page.', 'warning')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Get current user's organization ID
+def get_current_org_id():
+    if 'organization_id' in session:
+        return session['organization_id']
+    return None
+
 def init_db():
     try:
         conn = get_db()
         cur = conn.cursor()
         
+        # Create organizations table
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS organizations (
+                id BIGSERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT,
+                phone TEXT,
+                address TEXT,
+                subscription_tier TEXT DEFAULT 'starter',
+                subscription_status TEXT DEFAULT 'trial',
+                trial_ends_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active BOOLEAN DEFAULT true
+            )
+        ''')
+        
+        # Create users table
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id BIGSERIAL PRIMARY KEY,
+                organization_id BIGINT REFERENCES organizations(id) ON DELETE CASCADE,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                first_name TEXT,
+                last_name TEXT,
+                role TEXT DEFAULT 'staff',
+                is_active BOOLEAN DEFAULT true,
+                last_login TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # Create items table
         cur.execute('''
             CREATE TABLE IF NOT EXISTS items (
                 id BIGSERIAL PRIMARY KEY,
+                organization_id BIGINT REFERENCES organizations(id) ON DELETE CASCADE,
                 name TEXT NOT NULL,
                 category TEXT,
                 stock NUMERIC DEFAULT 0,
@@ -41,6 +93,7 @@ def init_db():
         cur.execute('''
             CREATE TABLE IF NOT EXISTS recipes (
                 id BIGSERIAL PRIMARY KEY,
+                organization_id BIGINT REFERENCES organizations(id) ON DELETE CASCADE,
                 name TEXT NOT NULL,
                 category TEXT,
                 selling_price NUMERIC DEFAULT 0,
@@ -74,20 +127,118 @@ def init_db():
         print(f"Database init error: {e}")
         traceback.print_exc()
 
+# AUTH ROUTES
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        try:
+            email = request.form['email']
+            password = request.form['password']
+            
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute('SELECT * FROM users WHERE email = %s AND is_active = true', (email,))
+            user = cur.fetchone()
+            
+            if user and check_password_hash(user['password_hash'], password):
+                # Set session
+                session['user_id'] = user['id']
+                session['organization_id'] = user['organization_id']
+                session['user_name'] = f"{user['first_name']} {user['last_name']}"
+                session['user_role'] = user['role']
+                
+                # Update last login
+                cur.execute('UPDATE users SET last_login = %s WHERE id = %s', (datetime.now(), user['id']))
+                conn.commit()
+                
+                cur.close()
+                conn.close()
+                
+                flash(f"Welcome back, {user['first_name']}!", 'success')
+                return redirect(url_for('home'))
+            else:
+                flash('Invalid email or password', 'danger')
+                cur.close()
+                conn.close()
+        except Exception as e:
+            print(f"Login error: {e}")
+            flash('Login failed. Please try again.', 'danger')
+    
+    return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            
+            # Create organization
+            cur.execute('''
+                INSERT INTO organizations (name, email, subscription_tier, subscription_status)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id
+            ''', (
+                request.form['restaurant_name'],
+                request.form['email'],
+                'starter',
+                'trial'
+            ))
+            org_id = cur.fetchone()['id']
+            
+            # Create user
+            password_hash = generate_password_hash(request.form['password'])
+            cur.execute('''
+                INSERT INTO users (organization_id, email, password_hash, first_name, last_name, role)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+            ''', (
+                org_id,
+                request.form['email'],
+                password_hash,
+                request.form['first_name'],
+                request.form['last_name'],
+                'owner'
+            ))
+            user_id = cur.fetchone()['id']
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            flash('Account created successfully! Please log in.', 'success')
+            return redirect(url_for('login'))
+            
+        except Exception as e:
+            print(f"Registration error: {e}")
+            flash('Registration failed. Email may already be in use.', 'danger')
+    
+    return render_template('register.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('login'))
+
+# MAIN ROUTES
+
 @app.route('/')
+@login_required
 def home():
     try:
+        org_id = get_current_org_id()
         conn = get_db()
         cur = conn.cursor()
         
-        # Get inventory stats
-        cur.execute('SELECT COUNT(*) as total_items FROM items')
+        cur.execute('SELECT COUNT(*) as total_items FROM items WHERE organization_id = %s', (org_id,))
         total_items = cur.fetchone()['total_items']
         
-        cur.execute('SELECT COUNT(*) as low_stock FROM items WHERE stock <= reorder_point')
+        cur.execute('SELECT COUNT(*) as low_stock FROM items WHERE organization_id = %s AND stock <= reorder_point', (org_id,))
         low_stock_count = cur.fetchone()['low_stock']
         
-        cur.execute('SELECT SUM(stock * cost) as total_value FROM items')
+        cur.execute('SELECT SUM(stock * cost) as total_value FROM items WHERE organization_id = %s', (org_id,))
         result = cur.fetchone()
         total_value = result['total_value'] if result['total_value'] else 0
         
@@ -106,16 +257,18 @@ def home():
                              total_value=0)
 
 @app.route('/inventory')
+@login_required
 def inventory():
     try:
+        org_id = get_current_org_id()
         search = request.args.get('search', '')
         category_filter = request.args.get('category', '')
         
         conn = get_db()
         cur = conn.cursor()
         
-        query = 'SELECT * FROM items WHERE 1=1'
-        params = []
+        query = 'SELECT * FROM items WHERE organization_id = %s'
+        params = [org_id]
         
         if search:
             query += ' AND LOWER(name) LIKE LOWER(%s)'
@@ -130,10 +283,10 @@ def inventory():
         cur.execute(query, params)
         items = cur.fetchall()
         
-        cur.execute('SELECT DISTINCT category FROM items WHERE category IS NOT NULL ORDER BY category')
+        cur.execute('SELECT DISTINCT category FROM items WHERE organization_id = %s AND category IS NOT NULL ORDER BY category', (org_id,))
         categories = [row['category'] for row in cur.fetchall()]
         
-        cur.execute('SELECT SUM(stock * cost) as total FROM items')
+        cur.execute('SELECT SUM(stock * cost) as total FROM items WHERE organization_id = %s', (org_id,))
         result = cur.fetchone()
         total_value = float(result['total']) if result['total'] else 0
         
@@ -152,15 +305,18 @@ def inventory():
         return f"Error loading inventory: {str(e)}", 500
 
 @app.route('/add', methods=['GET', 'POST'])
+@login_required
 def add():
     if request.method == 'POST':
         try:
+            org_id = get_current_org_id()
             conn = get_db()
             cur = conn.cursor()
             cur.execute('''
-                INSERT INTO items (name, category, stock, reorder_point, cost, unit, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO items (organization_id, name, category, stock, reorder_point, cost, unit, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
+                org_id,
                 request.form['name'],
                 request.form['category'],
                 request.form['stock'],
@@ -172,54 +328,63 @@ def add():
             conn.commit()
             cur.close()
             conn.close()
+            flash('Item added successfully!', 'success')
             return redirect('/inventory')
         except Exception as e:
             print(f"Add item error: {e}")
-            traceback.print_exc()
-            return f"Error adding item: {str(e)}", 500
+            flash('Error adding item', 'danger')
     return render_template('add.html')
 
 @app.route('/update/<int:id>', methods=['POST'])
+@login_required
 def update(id):
     try:
+        org_id = get_current_org_id()
         conn = get_db()
         cur = conn.cursor()
-        cur.execute('UPDATE items SET stock = %s, updated_at = %s WHERE id = %s', 
-                    (request.form['stock'], datetime.now(), id))
+        # Security: Make sure item belongs to user's organization
+        cur.execute('UPDATE items SET stock = %s, updated_at = %s WHERE id = %s AND organization_id = %s', 
+                    (request.form['stock'], datetime.now(), id, org_id))
         conn.commit()
         cur.close()
         conn.close()
+        flash('Stock updated!', 'success')
         return redirect('/inventory')
     except Exception as e:
         print(f"Update error: {e}")
-        traceback.print_exc()
-        return f"Error updating item: {str(e)}", 500
+        flash('Error updating item', 'danger')
+        return redirect('/inventory')
 
 @app.route('/delete/<int:id>')
+@login_required
 def delete(id):
     try:
+        org_id = get_current_org_id()
         conn = get_db()
         cur = conn.cursor()
-        cur.execute('DELETE FROM items WHERE id = %s', (id,))
+        cur.execute('DELETE FROM items WHERE id = %s AND organization_id = %s', (id, org_id))
         conn.commit()
         cur.close()
         conn.close()
+        flash('Item deleted!', 'success')
         return redirect('/inventory')
     except Exception as e:
         print(f"Delete error: {e}")
-        traceback.print_exc()
-        return f"Error deleting item: {str(e)}", 500
+        flash('Error deleting item', 'danger')
+        return redirect('/inventory')
 
 @app.route('/alerts')
+@login_required
 def alerts():
     try:
+        org_id = get_current_org_id()
         conn = get_db()
         cur = conn.cursor()
         cur.execute('''
             SELECT * FROM items 
-            WHERE stock <= reorder_point 
+            WHERE organization_id = %s AND stock <= reorder_point 
             ORDER BY stock ASC
-        ''')
+        ''', (org_id,))
         low_stock = cur.fetchall()
         cur.close()
         conn.close()
@@ -231,12 +396,13 @@ def alerts():
 # RECIPE ROUTES
 
 @app.route('/recipes')
+@login_required
 def recipes():
     try:
+        org_id = get_current_org_id()
         conn = get_db()
         cur = conn.cursor()
         
-        # Get all recipes with calculated costs
         cur.execute('''
             SELECT 
                 r.*,
@@ -245,12 +411,12 @@ def recipes():
             FROM recipes r
             LEFT JOIN recipe_ingredients ri ON r.id = ri.recipe_id
             LEFT JOIN items i ON ri.inventory_item_id = i.id
+            WHERE r.organization_id = %s
             GROUP BY r.id
             ORDER BY r.name
-        ''')
+        ''', (org_id,))
         recipes_list = cur.fetchall()
         
-        # Calculate profitability metrics
         for recipe in recipes_list:
             if recipe['selling_price'] and recipe['selling_price'] > 0:
                 recipe['food_cost_percent'] = (recipe['total_cost'] / recipe['selling_price']) * 100
@@ -269,16 +435,19 @@ def recipes():
         return f"Error loading recipes: {str(e)}", 500
 
 @app.route('/recipes/add', methods=['GET', 'POST'])
+@login_required
 def add_recipe():
     if request.method == 'POST':
         try:
+            org_id = get_current_org_id()
             conn = get_db()
             cur = conn.cursor()
             cur.execute('''
-                INSERT INTO recipes (name, category, selling_price, portion_size, servings, instructions, notes, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO recipes (organization_id, name, category, selling_price, portion_size, servings, instructions, notes, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             ''', (
+                org_id,
                 request.form['name'],
                 request.form['category'],
                 request.form['selling_price'],
@@ -292,28 +461,29 @@ def add_recipe():
             conn.commit()
             cur.close()
             conn.close()
+            flash('Recipe created successfully!', 'success')
             return redirect(f'/recipes/{recipe_id}')
         except Exception as e:
             print(f"Add recipe error: {e}")
-            traceback.print_exc()
-            return f"Error adding recipe: {str(e)}", 500
+            flash('Error creating recipe', 'danger')
     
     return render_template('add_recipe.html')
 
 @app.route('/recipes/<int:id>')
+@login_required
 def recipe_detail(id):
     try:
+        org_id = get_current_org_id()
         conn = get_db()
         cur = conn.cursor()
         
-        # Get recipe details
-        cur.execute('SELECT * FROM recipes WHERE id = %s', (id,))
+        cur.execute('SELECT * FROM recipes WHERE id = %s AND organization_id = %s', (id, org_id))
         recipe = cur.fetchone()
         
         if not recipe:
-            return "Recipe not found", 404
+            flash('Recipe not found', 'danger')
+            return redirect('/recipes')
         
-        # Get recipe ingredients with item details
         cur.execute('''
             SELECT 
                 ri.*,
@@ -328,7 +498,6 @@ def recipe_detail(id):
         ''', (id,))
         ingredients = cur.fetchall()
         
-        # Calculate totals
         total_cost = sum(ing['ingredient_cost'] for ing in ingredients)
         if recipe['selling_price'] and recipe['selling_price'] > 0:
             food_cost_percent = (total_cost / recipe['selling_price']) * 100
@@ -337,8 +506,7 @@ def recipe_detail(id):
             food_cost_percent = 0
             gross_profit = 0
         
-        # Get all inventory items for adding ingredients
-        cur.execute('SELECT * FROM items ORDER BY name')
+        cur.execute('SELECT * FROM items WHERE organization_id = %s ORDER BY name', (org_id,))
         all_items = cur.fetchall()
         
         cur.close()
@@ -354,13 +522,23 @@ def recipe_detail(id):
     except Exception as e:
         print(f"Recipe detail error: {e}")
         traceback.print_exc()
-        return f"Error loading recipe: {str(e)}", 500
+        flash('Error loading recipe', 'danger')
+        return redirect('/recipes')
 
 @app.route('/recipes/<int:recipe_id>/add-ingredient', methods=['POST'])
+@login_required
 def add_ingredient_to_recipe(recipe_id):
     try:
+        org_id = get_current_org_id()
         conn = get_db()
         cur = conn.cursor()
+        
+        # Verify recipe belongs to user's org
+        cur.execute('SELECT id FROM recipes WHERE id = %s AND organization_id = %s', (recipe_id, org_id))
+        if not cur.fetchone():
+            flash('Recipe not found', 'danger')
+            return redirect('/recipes')
+        
         cur.execute('''
             INSERT INTO recipe_ingredients (recipe_id, inventory_item_id, quantity, notes)
             VALUES (%s, %s, %s, %s)
@@ -373,12 +551,15 @@ def add_ingredient_to_recipe(recipe_id):
         conn.commit()
         cur.close()
         conn.close()
+        flash('Ingredient added!', 'success')
         return redirect(f'/recipes/{recipe_id}')
     except Exception as e:
         print(f"Add ingredient error: {e}")
-        return f"Error: {str(e)}", 500
+        flash('Error adding ingredient', 'danger')
+        return redirect(f'/recipes/{recipe_id}')
 
 @app.route('/recipes/<int:recipe_id>/remove-ingredient/<int:ingredient_id>')
+@login_required
 def remove_ingredient(recipe_id, ingredient_id):
     try:
         conn = get_db()
@@ -387,24 +568,30 @@ def remove_ingredient(recipe_id, ingredient_id):
         conn.commit()
         cur.close()
         conn.close()
+        flash('Ingredient removed!', 'success')
         return redirect(f'/recipes/{recipe_id}')
     except Exception as e:
         print(f"Remove ingredient error: {e}")
-        return f"Error: {str(e)}", 500
+        flash('Error removing ingredient', 'danger')
+        return redirect(f'/recipes/{recipe_id}')
 
 @app.route('/recipes/delete/<int:id>')
+@login_required
 def delete_recipe(id):
     try:
+        org_id = get_current_org_id()
         conn = get_db()
         cur = conn.cursor()
-        cur.execute('DELETE FROM recipes WHERE id = %s', (id,))
+        cur.execute('DELETE FROM recipes WHERE id = %s AND organization_id = %s', (id, org_id))
         conn.commit()
         cur.close()
         conn.close()
+        flash('Recipe deleted!', 'success')
         return redirect('/recipes')
     except Exception as e:
         print(f"Delete recipe error: {e}")
-        return f"Error: {str(e)}", 500
+        flash('Error deleting recipe', 'danger')
+        return redirect('/recipes')
 
 if __name__ == '__main__':
     init_db()
