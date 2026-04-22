@@ -219,6 +219,7 @@ def home():
         
         return render_template('dashboard.html', 
                              org=org,
+                             plans=PLANS,
                              total_items=total_items,
                              low_stock_count=low_stock_count,
                              total_value=float(total_value),
@@ -228,6 +229,7 @@ def home():
         traceback.print_exc()
         return render_template('dashboard.html', 
                              org=None,
+                             plans=PLANS,
                              total_items=0,
                              low_stock_count=0,
                              total_value=0,
