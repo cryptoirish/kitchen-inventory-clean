@@ -5,7 +5,8 @@ import os
 import traceback
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-from functools import wraps
+import csv
+from io import StringIO
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -592,7 +593,67 @@ def delete_recipe(id):
         print(f"Delete recipe error: {e}")
         flash('Error deleting recipe', 'danger')
         return redirect('/recipes')
-
+@app.route('/inventory/export')
+@login_required
+def export_inventory():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        
+        cur.execute('''
+            SELECT name, category, stock, unit, reorder_point, cost, 
+                   (stock * cost) as total_value,
+                   CASE 
+                       WHEN stock <= reorder_point THEN 'REORDER NOW'
+                       WHEN stock <= reorder_point * 1.5 THEN 'Low Stock'
+                       ELSE 'Good'
+                   END as status
+            FROM items 
+            WHERE organization_id = %s 
+            ORDER BY category, name
+        ''', (org_id,))
+        
+        items = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        # Create CSV
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        writer.writerow([
+            'Item Name', 'Category', 'Current Stock', 'Unit', 
+            'Reorder Point', 'Cost per Unit', 'Total Value', 'Status'
+        ])
+        
+        # Data rows
+        for item in items:
+            writer.writerow([
+                item['name'],
+                item['category'],
+                f"{item['stock']:.2f}",
+                item['unit'],
+                f"{item['reorder_point']:.2f}",
+                f"£{item['cost']:.2f}",
+                f"£{item['total_value']:.2f}",
+                item['status']
+            ])
+        
+        # Create response
+        from flask import make_response
+        output.seek(0)
+        response = make_response(output.getvalue())
+        response.headers['Content-Disposition'] = 'attachment; filename=inventory_export.csv'
+        response.headers['Content-Type'] = 'text/csv'
+        
+        return response
+        
+    except Exception as e:
+        print(f"Export error: {e}")
+        flash('Error exporting inventory', 'danger')
+        return redirect('/inventory')
 if __name__ == '__main__':
     init_db()
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
