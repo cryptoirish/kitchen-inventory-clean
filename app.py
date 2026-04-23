@@ -972,13 +972,14 @@ def add_delivery():
         conn = get_db()
         cur = conn.cursor()
         cur.execute('''
-            INSERT INTO haccp_delivery_logs (organization_id, supplier_name, delivery_date, temperature_check, packaging_ok, expiry_dates_ok, quality_ok, accepted, notes, inspected_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO haccp_delivery_logs (organization_id, supplier_name, delivery_date, chilled_temp, frozen_temp, packaging_ok, expiry_dates_ok, quality_ok, accepted, notes, inspected_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (
             org_id,
             request.form['supplier_name'],
             request.form['delivery_date'],
-            float(request.form['temperature_check']) if request.form.get('temperature_check') else None,
+            float(request.form['chilled_temp']) if request.form.get('chilled_temp') else None,
+            float(request.form['frozen_temp']) if request.form.get('frozen_temp') else None,
             request.form.get('packaging_ok') == 'on',
             request.form.get('expiry_dates_ok') == 'on',
             request.form.get('quality_ok') == 'on',
@@ -1176,14 +1177,16 @@ def edit_delivery(id):
         cur = conn.cursor()
         cur.execute('''
             UPDATE haccp_delivery_logs
-            SET supplier_name = %s, delivery_date = %s, temperature_check = %s,
+            SET supplier_name = %s, delivery_date = %s,
+                chilled_temp = %s, frozen_temp = %s,
                 packaging_ok = %s, expiry_dates_ok = %s, quality_ok = %s,
                 accepted = %s, notes = %s
             WHERE id = %s AND organization_id = %s
         ''', (
             request.form['supplier_name'],
             request.form['delivery_date'],
-            float(request.form['temperature_check']) if request.form.get('temperature_check') else None,
+            float(request.form['chilled_temp']) if request.form.get('chilled_temp') else None,
+            float(request.form['frozen_temp']) if request.form.get('frozen_temp') else None,
             request.form.get('packaging_ok') == 'on',
             request.form.get('expiry_dates_ok') == 'on',
             request.form.get('quality_ok') == 'on',
