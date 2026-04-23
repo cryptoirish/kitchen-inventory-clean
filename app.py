@@ -947,7 +947,31 @@ def add_cleaning_task():
     except Exception as e:
         flash('Error adding task', 'danger')
         return redirect('/haccp/cleaning')
-
+@app.route('/haccp/cleaning/log', methods=['POST'])
+@login_required
+def log_cleaning():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO haccp_cleaning_logs (organization_id, task_id, completed, notes, completed_by)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (
+            org_id,
+            request.form['task_id'],
+            True,
+            request.form.get('notes', ''),
+            session.get('user_name', 'Unknown')
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Cleaning logged!', 'success')
+        return redirect('/haccp/cleaning')
+    except Exception as e:
+        flash('Error logging cleaning', 'danger')
+        return redirect('/haccp/cleaning')
 @app.route('/haccp/cleaning/complete/<int:task_id>', methods=['POST'])
 @login_required
 def complete_cleaning(task_id):
