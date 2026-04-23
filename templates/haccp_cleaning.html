@@ -32,24 +32,39 @@
         label { font-size: 13px; font-weight: 500; color: #4a5568; }
         input, select, textarea { padding: 10px 12px; border: 1px solid #e1e4e8; border-radius: 6px; font-size: 14px; font-family: inherit; }
         input:focus, select:focus, textarea:focus { outline: none; border-color: #27ae60; }
-        .btn { background: #27ae60; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; }
+        .btn { background: #27ae60; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; }
         .btn:hover { background: #219a52; }
-        .btn-sm { padding: 6px 12px; font-size: 13px; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .btn-secondary { background: #718096; }
+        .btn-secondary:hover { background: #5a6578; }
+        .btn-danger { background: #e74c3c; }
+        .btn-danger:hover { background: #c0392b; }
         .flash { padding: 12px 16px; border-radius: 6px; margin-bottom: 15px; font-size: 14px; }
         .flash.success { background: #d4edda; color: #155724; }
         .flash.danger { background: #f8d7da; color: #721c24; }
-        .task-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; }
+        .task-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
         .task-card { border: 1px solid #e1e4e8; border-radius: 8px; padding: 18px; }
-        .task-name { font-weight: 600; margin-bottom: 6px; }
+        .task-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+        .task-name { font-weight: 600; }
+        .task-actions { display: flex; gap: 6px; flex-shrink: 0; }
         .task-meta { font-size: 13px; color: #718096; margin-bottom: 12px; }
         .task-freq { display: inline-block; background: #e8f5e9; color: #27ae60; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #edf2f7; font-size: 14px; }
         th { font-weight: 600; color: #4a5568; background: #f7fafc; }
+        .voided-row { background: #fef5f5; color: #9b2c2c; }
+        .voided-row td { text-decoration: line-through; }
+        .voided-row td.void-info { text-decoration: none; font-style: italic; font-size: 12px; }
+        .void-badge { background: #fed7d7; color: #822727; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
         .empty { text-align: center; padding: 30px; color: #718096; font-size: 14px; }
         .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
         .tab { padding: 8px 16px; background: #fff; border: 1px solid #e1e4e8; border-radius: 6px; cursor: pointer; font-size: 14px; }
         .tab.active { background: #27ae60; color: #fff; border-color: #27ae60; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: #fff; border-radius: 10px; padding: 25px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; }
+        .modal h3 { margin-bottom: 15px; font-size: 18px; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
         @media (max-width: 768px) {
             .nav-links { display: none; }
             .hamburger { display: flex; }
@@ -98,7 +113,15 @@
             <div class="task-grid">
                 {% for t in tasks %}
                 <div class="task-card">
-                    <div class="task-name">{{ t.task_name }}</div>
+                    <div class="task-header">
+                        <div class="task-name">{{ t.task_name }}</div>
+                        <div class="task-actions">
+                            <button class="btn btn-sm btn-secondary" onclick='openEditTask({{ t.id }}, {{ t.task_name|tojson }}, {{ (t.area or "")|tojson }}, {{ t.frequency|tojson }}, {{ (t.chemicals_used or "")|tojson }}, {{ (t.instructions or "")|tojson }})'>Edit</button>
+                            <form action="/haccp/cleaning/delete-task/{{ t.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Remove {{ t.task_name }} from active tasks? Historical logs will be kept.');">
+                                <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                            </form>
+                        </div>
+                    </div>
                     <div class="task-meta">
                         {% if t.area %}📍 {{ t.area }}<br>{% endif %}
                         {% if t.chemicals_used %}🧴 {{ t.chemicals_used }}<br>{% endif %}
@@ -158,15 +181,29 @@
             <h2>Recent Completions</h2>
             {% if logs %}
             <table>
-                <thead><tr><th>Completed</th><th>Task</th><th>Area</th><th>By</th><th>Notes</th></tr></thead>
+                <thead><tr><th>Completed</th><th>Task</th><th>Area</th><th>By</th><th>Notes</th><th></th></tr></thead>
                 <tbody>
                 {% for log in logs %}
-                <tr>
+                <tr {% if log.is_voided %}class="voided-row"{% endif %}>
                     <td>{{ log.completed_at.strftime('%d %b %H:%M') }}</td>
-                    <td>{{ log.task_name }}</td>
+                    <td>
+                        {{ log.task_name }}
+                        {% if log.is_voided %} <span class="void-badge">VOIDED</span>{% endif %}
+                    </td>
                     <td>{{ log.area or '—' }}</td>
                     <td>{{ log.completed_by }}</td>
-                    <td>{{ log.notes or '—' }}</td>
+                    <td class="{% if log.is_voided %}void-info{% endif %}">
+                        {% if log.is_voided %}
+                            Voided by {{ log.voided_by }}: {{ log.void_reason }}
+                        {% else %}
+                            {{ log.notes or '—' }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if not log.is_voided %}
+                        <button class="btn btn-sm btn-danger" onclick="openVoidCleaning({{ log.id }})">Void</button>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
                 </tbody>
@@ -174,6 +211,66 @@
             {% else %}
             <p class="empty">No cleaning logs yet.</p>
             {% endif %}
+        </div>
+    </div>
+
+    <!-- Edit Task Modal -->
+    <div class="modal-overlay" id="editTaskModal">
+        <div class="modal">
+            <h3>Edit Cleaning Task</h3>
+            <form id="editTaskForm" method="POST">
+                <div class="form-grid">
+                    <div class="form-group full">
+                        <label>Task name *</label>
+                        <input type="text" name="task_name" id="edit_task_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Frequency *</label>
+                        <select name="frequency" id="edit_frequency" required>
+                            <option>Daily</option>
+                            <option>Weekly</option>
+                            <option>Monthly</option>
+                            <option>Quarterly</option>
+                            <option>Annually</option>
+                            <option>After use</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Area</label>
+                        <input type="text" name="area" id="edit_area">
+                    </div>
+                    <div class="form-group full">
+                        <label>Chemicals used</label>
+                        <input type="text" name="chemicals_used" id="edit_chemicals">
+                    </div>
+                    <div class="form-group full">
+                        <label>Instructions</label>
+                        <textarea name="instructions" id="edit_instructions" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('editTaskModal')">Cancel</button>
+                    <button type="submit" class="btn">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Void Cleaning Log Modal -->
+    <div class="modal-overlay" id="voidCleaningModal">
+        <div class="modal">
+            <h3>Void Cleaning Log</h3>
+            <p style="font-size: 14px; color: #718096; margin-bottom: 15px;">The original entry will be preserved for the audit trail. Please explain why you are voiding it.</p>
+            <form id="voidCleaningForm" method="POST">
+                <div class="form-group">
+                    <label>Reason for voiding *</label>
+                    <textarea name="void_reason" rows="3" required placeholder="e.g. Logged in error — task was not actually completed"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('voidCleaningModal')">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Void Log</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -185,6 +282,23 @@
             document.getElementById('tasks-panel').style.display = name === 'tasks' ? 'block' : 'none';
             document.getElementById('add-panel').style.display = name === 'add' ? 'block' : 'none';
         }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+        function openEditTask(id, name, area, frequency, chemicals, instructions) {
+            document.getElementById('editTaskForm').action = '/haccp/cleaning/edit-task/' + id;
+            document.getElementById('edit_task_name').value = name;
+            document.getElementById('edit_area').value = area;
+            document.getElementById('edit_frequency').value = frequency;
+            document.getElementById('edit_chemicals').value = chemicals;
+            document.getElementById('edit_instructions').value = instructions;
+            document.getElementById('editTaskModal').classList.add('active');
+        }
+        function openVoidCleaning(id) {
+            document.getElementById('voidCleaningForm').action = '/haccp/cleaning/void/' + id;
+            document.getElementById('voidCleaningModal').classList.add('active');
+        }
+        document.querySelectorAll('.modal-overlay').forEach(m => {
+            m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
+        });
     </script>
 </body>
 </html>
