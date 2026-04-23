@@ -702,7 +702,7 @@ def billing_portal():
 
 # HACCP Dashboard
 @app.route('/haccp')
-@login_required
+# @login_required
 def haccp_dashboard():
     try:
         org_id = get_current_org_id()
