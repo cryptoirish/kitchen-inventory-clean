@@ -32,8 +32,13 @@
         label { font-size: 13px; font-weight: 500; color: #4a5568; }
         input, select, textarea { padding: 10px 12px; border: 1px solid #e1e4e8; border-radius: 6px; font-size: 14px; font-family: inherit; }
         input:focus, select:focus, textarea:focus { outline: none; border-color: #27ae60; }
-        .btn { background: #27ae60; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; }
+        .btn { background: #27ae60; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; }
         .btn:hover { background: #219a52; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .btn-secondary { background: #718096; }
+        .btn-secondary:hover { background: #5a6578; }
+        .btn-danger { background: #e74c3c; }
+        .btn-danger:hover { background: #c0392b; }
         .flash { padding: 12px 16px; border-radius: 6px; margin-bottom: 15px; font-size: 14px; }
         .flash.success { background: #d4edda; color: #155724; }
         .flash.danger { background: #f8d7da; color: #721c24; }
@@ -42,16 +47,32 @@
         th { font-weight: 600; color: #4a5568; background: #f7fafc; }
         .temp-pass { color: #27ae60; font-weight: 600; }
         .temp-fail { color: #e74c3c; font-weight: 600; }
+        .voided-row { background: #fef5f5; color: #9b2c2c; }
+        .voided-row td { text-decoration: line-through; }
+        .voided-row td.void-info { text-decoration: none; font-style: italic; font-size: 12px; }
+        .void-badge { background: #fed7d7; color: #822727; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; text-decoration: none; }
         .empty { text-align: center; padding: 30px; color: #718096; font-size: 14px; }
         .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
         .tab { padding: 8px 16px; background: #fff; border: 1px solid #e1e4e8; border-radius: 6px; cursor: pointer; font-size: 14px; }
         .tab.active { background: #27ae60; color: #fff; border-color: #27ae60; }
+        .equipment-list { list-style: none; }
+        .equipment-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 1px solid #e1e4e8; border-radius: 6px; margin-bottom: 8px; gap: 10px; }
+        .equipment-info { flex: 1; }
+        .equipment-name { font-weight: 600; margin-bottom: 4px; }
+        .equipment-meta { font-size: 12px; color: #718096; }
+        .equipment-actions { display: flex; gap: 6px; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: #fff; border-radius: 10px; padding: 25px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; }
+        .modal h3 { margin-bottom: 15px; font-size: 18px; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
         @media (max-width: 768px) {
             .nav-links { display: none; }
             .hamburger { display: flex; }
             .form-grid { grid-template-columns: 1fr; }
             table { font-size: 12px; }
             th, td { padding: 8px; }
+            .equipment-item { flex-direction: column; align-items: stretch; }
         }
     </style>
 </head>
@@ -87,7 +108,7 @@
 
         <div class="tabs">
             <div class="tab active" onclick="showTab('log', this)">Log Temperature</div>
-            <div class="tab" onclick="showTab('equipment', this)">Add Equipment</div>
+            <div class="tab" onclick="showTab('equipment', this)">Manage Equipment</div>
         </div>
 
         <div id="log-panel" class="card">
@@ -120,12 +141,38 @@
                 <button type="submit" class="btn" style="margin-top: 15px;">Log Temperature</button>
             </form>
             {% else %}
-            <p class="empty">No equipment added yet. Switch to the "Add Equipment" tab to add your first fridge, freezer or oven.</p>
+            <p class="empty">No equipment added yet. Switch to the "Manage Equipment" tab to add your first fridge, freezer or oven.</p>
             {% endif %}
         </div>
 
         <div id="equipment-panel" class="card" style="display:none;">
-            <h2>Add New Equipment</h2>
+            <h2>Current Equipment</h2>
+            {% if equipment %}
+            <ul class="equipment-list">
+                {% for e in equipment %}
+                <li class="equipment-item">
+                    <div class="equipment-info">
+                        <div class="equipment-name">{{ e.name }}</div>
+                        <div class="equipment-meta">
+                            {{ e.equipment_type }}
+                            {% if e.location %} • 📍 {{ e.location }}{% endif %}
+                            {% if e.min_temp is not none %} • {{ e.min_temp }}°C to {{ e.max_temp }}°C{% endif %}
+                        </div>
+                    </div>
+                    <div class="equipment-actions">
+                        <button class="btn btn-sm btn-secondary" onclick='openEditEquipment({{ e.id }}, {{ e.name|tojson }}, {{ e.equipment_type|tojson }}, {{ (e.location or "")|tojson }}, {{ e.min_temp if e.min_temp is not none else "null" }}, {{ e.max_temp if e.max_temp is not none else "null" }})'>Edit</button>
+                        <form action="/haccp/equipment/delete/{{ e.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Remove {{ e.name }} from active equipment? Historical logs will be kept.');">
+                            <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                        </form>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="empty">No equipment yet — add your first below.</p>
+            {% endif %}
+
+            <h2 style="margin-top: 25px;">Add New Equipment</h2>
             <form action="/haccp/equipment/add" method="POST">
                 <div class="form-grid">
                     <div class="form-group">
@@ -165,17 +212,30 @@
             <h2>Recent Logs</h2>
             {% if logs %}
             <table>
-                <thead><tr><th>Date/Time</th><th>Equipment</th><th>Type</th><th>Temp</th><th>Status</th><th>Logged by</th><th>Notes</th></tr></thead>
+                <thead><tr><th>Date/Time</th><th>Equipment</th><th>Temp</th><th>Status</th><th>By</th><th>Notes</th><th></th></tr></thead>
                 <tbody>
                 {% for log in logs %}
-                <tr>
+                <tr {% if log.is_voided %}class="voided-row"{% endif %}>
                     <td>{{ log.logged_at.strftime('%d %b %H:%M') }}</td>
                     <td>{{ log.equipment_name }}</td>
-                    <td>{{ log.equipment_type }}</td>
                     <td class="temp-{{ log.status }}">{{ log.temperature }}°C</td>
-                    <td class="temp-{{ log.status }}">{{ log.status|upper }}</td>
+                    <td class="temp-{{ log.status }}">
+                        {{ log.status|upper }}
+                        {% if log.is_voided %} <span class="void-badge">VOIDED</span>{% endif %}
+                    </td>
                     <td>{{ log.logged_by }}</td>
-                    <td>{{ log.notes or '—' }}</td>
+                    <td class="{% if log.is_voided %}void-info{% endif %}">
+                        {% if log.is_voided %}
+                            Voided by {{ log.voided_by }}: {{ log.void_reason }}
+                        {% else %}
+                            {{ log.notes or '—' }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if not log.is_voided %}
+                        <button class="btn btn-sm btn-danger" onclick="openVoidTemp({{ log.id }})">Void</button>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
                 </tbody>
@@ -183,6 +243,66 @@
             {% else %}
             <p class="empty">No temperature logs yet.</p>
             {% endif %}
+        </div>
+    </div>
+
+    <!-- Edit Equipment Modal -->
+    <div class="modal-overlay" id="editEquipmentModal">
+        <div class="modal">
+            <h3>Edit Equipment</h3>
+            <form id="editEquipmentForm" method="POST">
+                <div class="form-grid">
+                    <div class="form-group full">
+                        <label>Equipment name *</label>
+                        <input type="text" name="name" id="edit_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Type *</label>
+                        <select name="equipment_type" id="edit_type" required>
+                            <option value="Fridge">Fridge</option>
+                            <option value="Freezer">Freezer</option>
+                            <option value="Hot hold">Hot hold</option>
+                            <option value="Cooking">Cooking</option>
+                            <option value="Cold display">Cold display</option>
+                            <option value="Probe">Probe</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Location</label>
+                        <input type="text" name="location" id="edit_location">
+                    </div>
+                    <div class="form-group">
+                        <label>Min temp (°C)</label>
+                        <input type="number" name="min_temp" id="edit_min" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>Max temp (°C)</label>
+                        <input type="number" name="max_temp" id="edit_max" step="0.1">
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('editEquipmentModal')">Cancel</button>
+                    <button type="submit" class="btn">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Void Temperature Log Modal -->
+    <div class="modal-overlay" id="voidTempModal">
+        <div class="modal">
+            <h3>Void Temperature Log</h3>
+            <p style="font-size: 14px; color: #718096; margin-bottom: 15px;">The original reading will be preserved for the audit trail. Please explain why you are voiding it.</p>
+            <form id="voidTempForm" method="POST">
+                <div class="form-group">
+                    <label>Reason for voiding *</label>
+                    <textarea name="void_reason" rows="3" required placeholder="e.g. Probe faulty — retested with calibrated probe, see next entry"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('voidTempModal')">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Void Log</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -194,6 +314,23 @@
             document.getElementById('log-panel').style.display = name === 'log' ? 'block' : 'none';
             document.getElementById('equipment-panel').style.display = name === 'equipment' ? 'block' : 'none';
         }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+        function openEditEquipment(id, name, type, location, minTemp, maxTemp) {
+            document.getElementById('editEquipmentForm').action = '/haccp/equipment/edit/' + id;
+            document.getElementById('edit_name').value = name;
+            document.getElementById('edit_type').value = type;
+            document.getElementById('edit_location').value = location;
+            document.getElementById('edit_min').value = minTemp === null ? '' : minTemp;
+            document.getElementById('edit_max').value = maxTemp === null ? '' : maxTemp;
+            document.getElementById('editEquipmentModal').classList.add('active');
+        }
+        function openVoidTemp(id) {
+            document.getElementById('voidTempForm').action = '/haccp/temperature/void/' + id;
+            document.getElementById('voidTempModal').classList.add('active');
+        }
+        document.querySelectorAll('.modal-overlay').forEach(m => {
+            m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
+        });
     </script>
 </body>
 </html>
