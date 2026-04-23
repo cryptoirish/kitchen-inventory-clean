@@ -995,6 +995,230 @@ def add_delivery():
         print(f"Add delivery error: {e}")
         flash('Error logging delivery', 'danger')
         return redirect('/haccp/deliveries')
+# HACCP EDIT / DELETE / VOID ROUTES
 
+# --- Equipment: edit and soft-delete ---
+
+@app.route('/haccp/equipment/edit/<int:id>', methods=['POST'])
+@login_required
+def edit_equipment(id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE haccp_equipment
+            SET name = %s, equipment_type = %s, location = %s, min_temp = %s, max_temp = %s
+            WHERE id = %s AND organization_id = %s
+        ''', (
+            request.form['name'],
+            request.form['equipment_type'],
+            request.form.get('location', ''),
+            float(request.form['min_temp']) if request.form.get('min_temp') else None,
+            float(request.form['max_temp']) if request.form.get('max_temp') else None,
+            id,
+            org_id
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Equipment updated!', 'success')
+        return redirect('/haccp/temperatures')
+    except Exception as e:
+        print(f"Edit equipment error: {e}")
+        flash('Error updating equipment', 'danger')
+        return redirect('/haccp/temperatures')
+
+
+@app.route('/haccp/equipment/delete/<int:id>', methods=['POST'])
+@login_required
+def soft_delete_equipment(id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE haccp_equipment SET is_active = false
+            WHERE id = %s AND organization_id = %s
+        ''', (id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Equipment removed from active list. Historical logs preserved.', 'success')
+        return redirect('/haccp/temperatures')
+    except Exception as e:
+        print(f"Delete equipment error: {e}")
+        flash('Error removing equipment', 'danger')
+        return redirect('/haccp/temperatures')
+
+
+# --- Temperature logs: void with reason ---
+
+@app.route('/haccp/temperature/void/<int:id>', methods=['POST'])
+@login_required
+def void_temperature_log(id):
+    try:
+        org_id = get_current_org_id()
+        reason = request.form.get('void_reason', '').strip()
+        if not reason:
+            flash('A reason is required to void a log entry.', 'danger')
+            return redirect('/haccp/temperatures')
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE haccp_temperature_logs
+            SET is_voided = true, void_reason = %s, voided_by = %s, voided_at = NOW()
+            WHERE id = %s AND organization_id = %s
+        ''', (reason, session.get('user_name', 'Unknown'), id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Temperature log voided. Original record preserved for audit.', 'success')
+        return redirect('/haccp/temperatures')
+    except Exception as e:
+        print(f"Void temperature error: {e}")
+        flash('Error voiding log', 'danger')
+        return redirect('/haccp/temperatures')
+
+
+# --- Cleaning tasks: edit and soft-delete ---
+
+@app.route('/haccp/cleaning/edit-task/<int:id>', methods=['POST'])
+@login_required
+def edit_cleaning_task(id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE haccp_cleaning_tasks
+            SET task_name = %s, area = %s, frequency = %s, chemicals_used = %s, instructions = %s
+            WHERE id = %s AND organization_id = %s
+        ''', (
+            request.form['task_name'],
+            request.form.get('area', ''),
+            request.form['frequency'],
+            request.form.get('chemicals_used', ''),
+            request.form.get('instructions', ''),
+            id,
+            org_id
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Cleaning task updated!', 'success')
+        return redirect('/haccp/cleaning')
+    except Exception as e:
+        print(f"Edit cleaning task error: {e}")
+        flash('Error updating task', 'danger')
+        return redirect('/haccp/cleaning')
+
+
+@app.route('/haccp/cleaning/delete-task/<int:id>', methods=['POST'])
+@login_required
+def soft_delete_cleaning_task(id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE haccp_cleaning_tasks SET is_active = false
+            WHERE id = %s AND organization_id = %s
+        ''', (id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Task removed from active list. Historical logs preserved.', 'success')
+        return redirect('/haccp/cleaning')
+    except Exception as e:
+        print(f"Delete cleaning task error: {e}")
+        flash('Error removing task', 'danger')
+        return redirect('/haccp/cleaning')
+
+
+# --- Cleaning logs: void with reason ---
+
+@app.route('/haccp/cleaning/void/<int:id>', methods=['POST'])
+@login_required
+def void_cleaning_log(id):
+    try:
+        org_id = get_current_org_id()
+        reason = request.form.get('void_reason', '').strip()
+        if not reason:
+            flash('A reason is required to void a log entry.', 'danger')
+            return redirect('/haccp/cleaning')
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE haccp_cleaning_logs
+            SET is_voided = true, void_reason = %s, voided_by = %s, voided_at = NOW()
+            WHERE id = %s AND organization_id = %s
+        ''', (reason, session.get('user_name', 'Unknown'), id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Cleaning log voided. Original record preserved for audit.', 'success')
+        return redirect('/haccp/cleaning')
+    except Exception as e:
+        print(f"Void cleaning error: {e}")
+        flash('Error voiding log', 'danger')
+        return redirect('/haccp/cleaning')
+
+
+# --- Deliveries: edit and hard-delete ---
+
+@app.route('/haccp/deliveries/edit/<int:id>', methods=['POST'])
+@login_required
+def edit_delivery(id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE haccp_delivery_logs
+            SET supplier_name = %s, delivery_date = %s, temperature_check = %s,
+                packaging_ok = %s, expiry_dates_ok = %s, quality_ok = %s,
+                accepted = %s, notes = %s
+            WHERE id = %s AND organization_id = %s
+        ''', (
+            request.form['supplier_name'],
+            request.form['delivery_date'],
+            float(request.form['temperature_check']) if request.form.get('temperature_check') else None,
+            request.form.get('packaging_ok') == 'on',
+            request.form.get('expiry_dates_ok') == 'on',
+            request.form.get('quality_ok') == 'on',
+            request.form.get('accepted') == 'on',
+            request.form.get('notes', ''),
+            id,
+            org_id
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Delivery updated!', 'success')
+        return redirect('/haccp/deliveries')
+    except Exception as e:
+        print(f"Edit delivery error: {e}")
+        flash('Error updating delivery', 'danger')
+        return redirect('/haccp/deliveries')
+
+
+@app.route('/haccp/deliveries/delete/<int:id>', methods=['POST'])
+@login_required
+def delete_delivery(id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM haccp_delivery_logs WHERE id = %s AND organization_id = %s', (id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Delivery deleted.', 'success')
+        return redirect('/haccp/deliveries')
+    except Exception as e:
+        print(f"Delete delivery error: {e}")
+        flash('Error deleting delivery', 'danger')
+        return redirect('/haccp/deliveries')
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
