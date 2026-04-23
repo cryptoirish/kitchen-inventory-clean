@@ -32,6 +32,7 @@
         .form-group.check { flex-direction: row; align-items: center; gap: 8px; }
         .form-group.check input { width: auto; }
         label { font-size: 13px; font-weight: 500; color: #4a5568; }
+        .help-text { font-size: 12px; color: #718096; font-weight: normal; }
         input, select, textarea { padding: 10px 12px; border: 1px solid #e1e4e8; border-radius: 6px; font-size: 14px; font-family: inherit; }
         input:focus, select:focus, textarea:focus { outline: none; border-color: #27ae60; }
         .btn { background: #27ae60; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; }
@@ -50,7 +51,11 @@
         .empty { text-align: center; padding: 30px; color: #718096; font-size: 14px; }
         .badge-ok { color: #27ae60; }
         .badge-fail { color: #e74c3c; }
+        .temp-warn { color: #e74c3c; font-weight: 600; }
         .checks-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; grid-column: 1 / -1; padding: 12px; background: #f7fafc; border-radius: 6px; }
+        .temp-section { grid-column: 1 / -1; padding: 14px; background: #f0f9ff; border: 1px solid #cfe8f6; border-radius: 6px; }
+        .temp-section-title { font-weight: 600; font-size: 13px; margin-bottom: 10px; color: #2c5282; }
+        .temp-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .row-actions { display: flex; gap: 6px; }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
         .modal-overlay.active { display: flex; }
@@ -62,6 +67,9 @@
             .hamburger { display: flex; }
             .form-grid { grid-template-columns: 1fr; }
             .checks-row { grid-template-columns: 1fr 1fr; }
+            .temp-inputs { grid-template-columns: 1fr; }
+            table { font-size: 12px; }
+            th, td { padding: 6px 8px; }
         }
     </style>
 </head>
@@ -107,11 +115,21 @@
                         <label>Delivery date *</label>
                         <input type="date" name="delivery_date" required>
                     </div>
-                    <div class="form-group">
-                        <label>Temperature check (°C)</label>
-                        <input type="number" name="temperature_check" step="0.1" placeholder="For chilled/frozen">
+
+                    <div class="temp-section">
+                        <div class="temp-section-title">🚚 Vehicle temperature checks</div>
+                        <div class="temp-inputs">
+                            <div class="form-group">
+                                <label>Chilled compartment (°C) <span class="help-text">target ≤ 8°C</span></label>
+                                <input type="number" name="chilled_temp" step="0.1" placeholder="e.g. 4.0">
+                            </div>
+                            <div class="form-group">
+                                <label>Frozen compartment (°C) <span class="help-text">target ≤ −18°C</span></label>
+                                <input type="number" name="frozen_temp" step="0.1" placeholder="e.g. -20.0">
+                            </div>
+                        </div>
                     </div>
-                    <div class="form-group"></div>
+
                     <div class="checks-row">
                         <div class="form-group check"><input type="checkbox" name="packaging_ok" checked id="p"><label for="p">Packaging OK</label></div>
                         <div class="form-group check"><input type="checkbox" name="expiry_dates_ok" checked id="e"><label for="e">Dates OK</label></div>
@@ -120,7 +138,7 @@
                     </div>
                     <div class="form-group full">
                         <label>Notes</label>
-                        <textarea name="notes" rows="2" placeholder="Any issues or comments"></textarea>
+                        <textarea name="notes" rows="2" placeholder="Any issues, corrective action taken, or comments"></textarea>
                     </div>
                 </div>
                 <button type="submit" class="btn" style="margin-top: 15px;">Log Delivery</button>
@@ -131,13 +149,25 @@
             <h2>Recent Deliveries</h2>
             {% if deliveries %}
             <table>
-                <thead><tr><th>Date</th><th>Supplier</th><th>Temp</th><th>Pack</th><th>Dates</th><th>Quality</th><th>Accepted</th><th>By</th><th></th></tr></thead>
+                <thead>
+                    <tr>
+                        <th>Date</th><th>Supplier</th>
+                        <th>Chilled</th><th>Frozen</th>
+                        <th>Pack</th><th>Dates</th><th>Quality</th><th>Accepted</th>
+                        <th>By</th><th></th>
+                    </tr>
+                </thead>
                 <tbody>
                 {% for d in deliveries %}
                 <tr>
                     <td>{{ d.delivery_date.strftime('%d %b %Y') }}</td>
                     <td>{{ d.supplier_name }}</td>
-                    <td>{% if d.temperature_check is not none %}{{ d.temperature_check }}°C{% else %}—{% endif %}</td>
+                    <td class="{% if d.chilled_temp is not none and d.chilled_temp > 8 %}temp-warn{% endif %}">
+                        {% if d.chilled_temp is not none %}{{ d.chilled_temp }}°C{% else %}—{% endif %}
+                    </td>
+                    <td class="{% if d.frozen_temp is not none and d.frozen_temp > -18 %}temp-warn{% endif %}">
+                        {% if d.frozen_temp is not none %}{{ d.frozen_temp }}°C{% else %}—{% endif %}
+                    </td>
                     <td class="{% if d.packaging_ok %}badge-ok{% else %}badge-fail{% endif %}">{{ '✓' if d.packaging_ok else '✗' }}</td>
                     <td class="{% if d.expiry_dates_ok %}badge-ok{% else %}badge-fail{% endif %}">{{ '✓' if d.expiry_dates_ok else '✗' }}</td>
                     <td class="{% if d.quality_ok %}badge-ok{% else %}badge-fail{% endif %}">{{ '✓' if d.quality_ok else '✗' }}</td>
@@ -145,7 +175,7 @@
                     <td>{{ d.inspected_by }}</td>
                     <td>
                         <div class="row-actions">
-                            <button class="btn btn-sm btn-secondary" onclick='openEditDelivery({{ d.id }}, {{ d.supplier_name|tojson }}, {{ d.delivery_date.strftime("%Y-%m-%d")|tojson }}, {{ d.temperature_check if d.temperature_check is not none else "null" }}, {{ d.packaging_ok|tojson }}, {{ d.expiry_dates_ok|tojson }}, {{ d.quality_ok|tojson }}, {{ d.accepted|tojson }}, {{ (d.notes or "")|tojson }})'>Edit</button>
+                            <button class="btn btn-sm btn-secondary" onclick='openEditDelivery({{ d.id }}, {{ d.supplier_name|tojson }}, {{ d.delivery_date.strftime("%Y-%m-%d")|tojson }}, {{ d.chilled_temp if d.chilled_temp is not none else "null" }}, {{ d.frozen_temp if d.frozen_temp is not none else "null" }}, {{ d.packaging_ok|tojson }}, {{ d.expiry_dates_ok|tojson }}, {{ d.quality_ok|tojson }}, {{ d.accepted|tojson }}, {{ (d.notes or "")|tojson }})'>Edit</button>
                             <form action="/haccp/deliveries/delete/{{ d.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this delivery record? This cannot be undone.');">
                                 <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                             </form>
@@ -175,11 +205,21 @@
                         <label>Delivery date *</label>
                         <input type="date" name="delivery_date" id="ed_date" required>
                     </div>
-                    <div class="form-group">
-                        <label>Temperature check (°C)</label>
-                        <input type="number" name="temperature_check" id="ed_temp" step="0.1">
+
+                    <div class="temp-section">
+                        <div class="temp-section-title">🚚 Vehicle temperature checks</div>
+                        <div class="temp-inputs">
+                            <div class="form-group">
+                                <label>Chilled compartment (°C) <span class="help-text">target ≤ 8°C</span></label>
+                                <input type="number" name="chilled_temp" id="ed_chilled" step="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label>Frozen compartment (°C) <span class="help-text">target ≤ −18°C</span></label>
+                                <input type="number" name="frozen_temp" id="ed_frozen" step="0.1">
+                            </div>
+                        </div>
                     </div>
-                    <div class="form-group"></div>
+
                     <div class="checks-row">
                         <div class="form-group check"><input type="checkbox" name="packaging_ok" id="ed_pack"><label for="ed_pack">Packaging OK</label></div>
                         <div class="form-group check"><input type="checkbox" name="expiry_dates_ok" id="ed_dates"><label for="ed_dates">Dates OK</label></div>
@@ -202,11 +242,12 @@
     <script>
         function toggleMenu() { document.getElementById('mobileMenu').classList.toggle('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-        function openEditDelivery(id, supplier, date, temp, pack, dates, quality, accepted, notes) {
+        function openEditDelivery(id, supplier, date, chilled, frozen, pack, dates, quality, accepted, notes) {
             document.getElementById('editDeliveryForm').action = '/haccp/deliveries/edit/' + id;
             document.getElementById('ed_supplier').value = supplier;
             document.getElementById('ed_date').value = date;
-            document.getElementById('ed_temp').value = temp === null ? '' : temp;
+            document.getElementById('ed_chilled').value = chilled === null ? '' : chilled;
+            document.getElementById('ed_frozen').value = frozen === null ? '' : frozen;
             document.getElementById('ed_pack').checked = pack;
             document.getElementById('ed_dates').checked = dates;
             document.getElementById('ed_qual').checked = quality;
