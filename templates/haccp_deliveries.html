@@ -34,8 +34,13 @@
         label { font-size: 13px; font-weight: 500; color: #4a5568; }
         input, select, textarea { padding: 10px 12px; border: 1px solid #e1e4e8; border-radius: 6px; font-size: 14px; font-family: inherit; }
         input:focus, select:focus, textarea:focus { outline: none; border-color: #27ae60; }
-        .btn { background: #27ae60; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; }
+        .btn { background: #27ae60; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; }
         .btn:hover { background: #219a52; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .btn-secondary { background: #718096; }
+        .btn-secondary:hover { background: #5a6578; }
+        .btn-danger { background: #e74c3c; }
+        .btn-danger:hover { background: #c0392b; }
         .flash { padding: 12px 16px; border-radius: 6px; margin-bottom: 15px; font-size: 14px; }
         .flash.success { background: #d4edda; color: #155724; }
         .flash.danger { background: #f8d7da; color: #721c24; }
@@ -46,6 +51,12 @@
         .badge-ok { color: #27ae60; }
         .badge-fail { color: #e74c3c; }
         .checks-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; grid-column: 1 / -1; padding: 12px; background: #f7fafc; border-radius: 6px; }
+        .row-actions { display: flex; gap: 6px; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: #fff; border-radius: 10px; padding: 25px; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; }
+        .modal h3 { margin-bottom: 15px; font-size: 18px; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
         @media (max-width: 768px) {
             .nav-links { display: none; }
             .hamburger { display: flex; }
@@ -120,7 +131,7 @@
             <h2>Recent Deliveries</h2>
             {% if deliveries %}
             <table>
-                <thead><tr><th>Date</th><th>Supplier</th><th>Temp</th><th>Pack</th><th>Dates</th><th>Quality</th><th>Accepted</th><th>By</th></tr></thead>
+                <thead><tr><th>Date</th><th>Supplier</th><th>Temp</th><th>Pack</th><th>Dates</th><th>Quality</th><th>Accepted</th><th>By</th><th></th></tr></thead>
                 <tbody>
                 {% for d in deliveries %}
                 <tr>
@@ -132,6 +143,14 @@
                     <td class="{% if d.quality_ok %}badge-ok{% else %}badge-fail{% endif %}">{{ '✓' if d.quality_ok else '✗' }}</td>
                     <td class="{% if d.accepted %}badge-ok{% else %}badge-fail{% endif %}">{{ '✓ Yes' if d.accepted else '✗ No' }}</td>
                     <td>{{ d.inspected_by }}</td>
+                    <td>
+                        <div class="row-actions">
+                            <button class="btn btn-sm btn-secondary" onclick='openEditDelivery({{ d.id }}, {{ d.supplier_name|tojson }}, {{ d.delivery_date.strftime("%Y-%m-%d")|tojson }}, {{ d.temperature_check if d.temperature_check is not none else "null" }}, {{ d.packaging_ok|tojson }}, {{ d.expiry_dates_ok|tojson }}, {{ d.quality_ok|tojson }}, {{ d.accepted|tojson }}, {{ (d.notes or "")|tojson }})'>Edit</button>
+                            <form action="/haccp/deliveries/delete/{{ d.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this delivery record? This cannot be undone.');">
+                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            </form>
+                        </div>
+                    </td>
                 </tr>
                 {% endfor %}
                 </tbody>
@@ -142,8 +161,62 @@
         </div>
     </div>
 
+    <!-- Edit Delivery Modal -->
+    <div class="modal-overlay" id="editDeliveryModal">
+        <div class="modal">
+            <h3>Edit Delivery</h3>
+            <form id="editDeliveryForm" method="POST">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Supplier *</label>
+                        <input type="text" name="supplier_name" id="ed_supplier" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Delivery date *</label>
+                        <input type="date" name="delivery_date" id="ed_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Temperature check (°C)</label>
+                        <input type="number" name="temperature_check" id="ed_temp" step="0.1">
+                    </div>
+                    <div class="form-group"></div>
+                    <div class="checks-row">
+                        <div class="form-group check"><input type="checkbox" name="packaging_ok" id="ed_pack"><label for="ed_pack">Packaging OK</label></div>
+                        <div class="form-group check"><input type="checkbox" name="expiry_dates_ok" id="ed_dates"><label for="ed_dates">Dates OK</label></div>
+                        <div class="form-group check"><input type="checkbox" name="quality_ok" id="ed_qual"><label for="ed_qual">Quality OK</label></div>
+                        <div class="form-group check"><input type="checkbox" name="accepted" id="ed_acc"><label for="ed_acc">Accepted</label></div>
+                    </div>
+                    <div class="form-group full">
+                        <label>Notes</label>
+                        <textarea name="notes" id="ed_notes" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('editDeliveryModal')">Cancel</button>
+                    <button type="submit" class="btn">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         function toggleMenu() { document.getElementById('mobileMenu').classList.toggle('active'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+        function openEditDelivery(id, supplier, date, temp, pack, dates, quality, accepted, notes) {
+            document.getElementById('editDeliveryForm').action = '/haccp/deliveries/edit/' + id;
+            document.getElementById('ed_supplier').value = supplier;
+            document.getElementById('ed_date').value = date;
+            document.getElementById('ed_temp').value = temp === null ? '' : temp;
+            document.getElementById('ed_pack').checked = pack;
+            document.getElementById('ed_dates').checked = dates;
+            document.getElementById('ed_qual').checked = quality;
+            document.getElementById('ed_acc').checked = accepted;
+            document.getElementById('ed_notes').value = notes;
+            document.getElementById('editDeliveryModal').classList.add('active');
+        }
+        document.querySelectorAll('.modal-overlay').forEach(m => {
+            m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
+        });
     </script>
 </body>
 </html>
