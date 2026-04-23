@@ -6,34 +6,58 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a202c; color: #e2e8f0; min-height: 100vh; }
-        .navbar { background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%); padding: 20px 0; box-shadow: 0 2px 20px rgba(0,0,0,0.3); border-bottom: 1px solid #27ae60; }
-        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 20px; display: flex; justify-content: space-between; align-items: center; }
-        .logo { display: flex; align-items: center; gap: 15px; text-decoration: none; }
-        .logo-icon { width: 45px; height: 45px; background: linear-gradient(135deg, #27ae60 0%, #229954 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
-        .logo-text { color: #27ae60; font-size: 24px; font-weight: bold; }
-        .nav-links { display: flex; gap: 20px; align-items: center; }
-        .nav-links a { color: #e2e8f0; text-decoration: none; font-weight: 500; padding: 10px 20px; border-radius: 8px; transition: all 0.3s; border: 1px solid transparent; }
-        .nav-links a:hover { background: rgba(39, 174, 96, 0.1); border-color: #27ae60; color: #27ae60; }
-        .container { max-width: 800px; margin: 40px auto; padding: 0 20px; }
-        .form-card { background: linear-gradient(135deg, #2d3748 0%, #374151 100%); padding: 40px; border-radius: 15px; border: 1px solid #4a5568; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-        .form-header { margin-bottom: 30px; }
-        .form-header h1 { color: #27ae60; font-size: 32px; margin-bottom: 10px; }
-        .form-header p { color: #a0aec0; font-size: 16px; }
-        .form-group { margin-bottom: 25px; }
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        label { display: block; margin-bottom: 8px; font-weight: 600; color: #cbd5e0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
-        input, select, textarea { width: 100%; padding: 14px 16px; background: #1a202c; border: 1px solid #4a5568; border-radius: 8px; color: #e2e8f0; font-size: 15px; transition: all 0.3s; font-family: inherit; }
+        
+        .navbar { background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%); padding: 15px 0; border-bottom: 1px solid #27ae60; position: sticky; top: 0; z-index: 1000; }
+        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 15px; display: flex; justify-content: space-between; align-items: center; }
+        .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+        .logo-icon { width: 40px; height: 40px; background: linear-gradient(135deg, #27ae60 0%, #229954 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .logo-text { color: #27ae60; font-size: 20px; font-weight: bold; }
+        .nav-links { display: flex; gap: 10px; align-items: center; }
+        .nav-links a { color: #e2e8f0; text-decoration: none; font-weight: 500; padding: 8px 14px; border-radius: 8px; transition: all 0.3s; font-size: 14px; }
+        .nav-links a:hover { background: rgba(39, 174, 96, 0.1); color: #27ae60; }
+        
+        .hamburger { display: none; flex-direction: column; gap: 4px; cursor: pointer; padding: 10px; border: none; background: none; }
+        .hamburger span { width: 25px; height: 3px; background: #27ae60; border-radius: 2px; }
+        
+        .mobile-menu { display: none; position: fixed; top: 70px; left: 0; right: 0; background: #1a202c; padding: 20px; border-bottom: 2px solid #27ae60; flex-direction: column; gap: 10px; z-index: 999; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .mobile-menu.active { display: flex; }
+        .mobile-menu a { color: #e2e8f0; text-decoration: none; font-weight: 500; padding: 15px 20px; border-radius: 10px; font-size: 16px; border: 1px solid #374151; }
+        .mobile-menu a:hover, .mobile-menu a.active { background: rgba(39, 174, 96, 0.1); color: #27ae60; border-color: #27ae60; }
+        
+        .container { max-width: 700px; margin: 20px auto; padding: 0 15px; }
+        
+        .form-card { background: linear-gradient(135deg, #2d3748 0%, #374151 100%); padding: 25px 20px; border-radius: 12px; border: 1px solid #4a5568; }
+        .form-header { margin-bottom: 25px; }
+        .form-header h1 { color: #27ae60; font-size: 24px; margin-bottom: 8px; }
+        .form-header p { color: #a0aec0; font-size: 14px; }
+        
+        .info-box { background: rgba(39, 174, 96, 0.1); border: 1px solid rgba(39, 174, 96, 0.3); padding: 12px 15px; border-radius: 8px; margin-bottom: 20px; }
+        .info-box p { color: #27ae60; font-size: 13px; line-height: 1.5; }
+        
+        .form-group { margin-bottom: 20px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        label { display: block; margin-bottom: 6px; font-weight: 600; color: #cbd5e0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+        input, select, textarea { width: 100%; padding: 12px 14px; background: #1a202c; border: 1px solid #4a5568; border-radius: 8px; color: #e2e8f0; font-size: 15px; font-family: inherit; transition: all 0.3s; }
         input:focus, select:focus, textarea:focus { outline: none; border-color: #27ae60; box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.1); }
-        textarea { min-height: 120px; resize: vertical; }
-        .btn { display: inline-block; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; transition: all 0.3s; cursor: pointer; border: none; }
-        .btn-primary { background: linear-gradient(135deg, #27ae60 0%, #229954 100%); color: white; box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3); }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4); }
+        textarea { min-height: 100px; resize: vertical; }
+        
+        .btn { display: inline-block; padding: 14px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px; transition: all 0.3s; cursor: pointer; border: none; text-align: center; }
+        .btn-primary { background: linear-gradient(135deg, #27ae60 0%, #229954 100%); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); }
         .btn-secondary { background: #374151; color: #e2e8f0; border: 1px solid #4a5568; }
-        .btn-secondary:hover { background: #4a5568; }
-        .form-actions { display: flex; gap: 15px; margin-top: 35px; }
-        .helper-text { font-size: 13px; color: #a0aec0; margin-top: 5px; }
-        .info-box { background: rgba(39, 174, 96, 0.1); border: 1px solid rgba(39, 174, 96, 0.3); padding: 15px; border-radius: 8px; margin-bottom: 25px; }
-        .info-box p { color: #27ae60; font-size: 14px; line-height: 1.6; }
+        
+        .form-actions { display: flex; gap: 12px; margin-top: 25px; }
+        .form-actions .btn { flex: 1; }
+        .helper-text { font-size: 12px; color: #a0aec0; margin-top: 4px; }
+        
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .hamburger { display: flex; }
+            .logo-text { font-size: 18px; }
+            .form-row { grid-template-columns: 1fr; gap: 20px; }
+            .form-card { padding: 20px 15px; }
+            .form-actions { flex-direction: column; }
+        }
     </style>
 </head>
 <body>
@@ -44,37 +68,49 @@
                 <div class="logo-text">YieldGuard</div>
             </a>
             <div class="nav-links">
-                <a href="/">Home</a>
+                <a href="/">Dashboard</a>
                 <a href="/inventory">Inventory</a>
                 <a href="/recipes" style="color: #27ae60;">Recipes</a>
                 <a href="/alerts">Alerts</a>
+                <a href="/billing">Billing</a>
+                <a href="/logout">Logout</a>
             </div>
+            <button class="hamburger" onclick="toggleMenu()">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+        <div class="mobile-menu" id="mobileMenu">
+            <a href="/">📊 Dashboard</a>
+            <a href="/inventory">📦 Inventory</a>
+            <a href="/recipes" class="active">🍽️ Recipes</a>
+            <a href="/alerts">⚠️ Alerts</a>
+            <a href="/billing">💳 Billing</a>
+            <a href="/logout">🚪 Logout</a>
         </div>
     </nav>
     
     <div class="container">
         <div class="form-card">
             <div class="form-header">
-                <h1>➕ Create New Recipe</h1>
-                <p>Add basic recipe information. You'll add ingredients on the next page.</p>
+                <h1>➕ Create Recipe</h1>
+                <p>Add recipe info. You'll add ingredients on next page.</p>
             </div>
             
             <div class="info-box">
-                <p>💡 Tip: Create the recipe first, then you'll be able to add ingredients from your inventory and see real-time cost calculations.</p>
+                <p>💡 Create recipe first, then add ingredients from inventory to see real-time costs.</p>
             </div>
             
             <form method="POST">
                 <div class="form-group">
                     <label>Recipe Name *</label>
-                    <input type="text" name="name" placeholder="e.g., Chicken Supreme, Fish & Chips" required>
-                    <p class="helper-text">The name of your dish as it appears on the menu</p>
+                    <input type="text" name="name" placeholder="e.g., Chicken Supreme" required>
                 </div>
                 
                 <div class="form-row">
                     <div class="form-group">
                         <label>Category *</label>
                         <select name="category" required>
-                            <option value="">Select category...</option>
+                            <option value="">Select...</option>
                             <option value="Starter">Starter</option>
                             <option value="Main">Main Course</option>
                             <option value="Dessert">Dessert</option>
@@ -87,7 +123,6 @@
                     <div class="form-group">
                         <label>Servings *</label>
                         <input type="number" name="servings" value="1" min="1" required>
-                        <p class="helper-text">Number of portions this recipe makes</p>
                     </div>
                 </div>
                 
@@ -95,32 +130,45 @@
                     <div class="form-group">
                         <label>Selling Price (£) *</label>
                         <input type="number" name="selling_price" step="0.01" placeholder="0.00" required>
-                        <p class="helper-text">Menu price for this dish</p>
+                        <p class="helper-text">Menu price</p>
                     </div>
                     
                     <div class="form-group">
                         <label>Portion Size</label>
-                        <input type="text" name="portion_size" placeholder="e.g., 300g, 1 plate">
-                        <p class="helper-text">Optional: serving size description</p>
+                        <input type="text" name="portion_size" placeholder="e.g., 300g">
+                        <p class="helper-text">Optional</p>
                     </div>
                 </div>
                 
                 <div class="form-group">
                     <label>Cooking Instructions</label>
-                    <textarea name="instructions" placeholder="Optional: Step-by-step cooking instructions"></textarea>
+                    <textarea name="instructions" placeholder="Optional: Step-by-step instructions"></textarea>
                 </div>
                 
                 <div class="form-group">
                     <label>Notes</label>
-                    <textarea name="notes" placeholder="Optional: Allergens, dietary info, chef notes"></textarea>
+                    <textarea name="notes" placeholder="Optional: Allergens, dietary info"></textarea>
                 </div>
                 
                 <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">Create Recipe & Add Ingredients</button>
+                    <button type="submit" class="btn btn-primary">Create & Add Ingredients</button>
                     <a href="/recipes" class="btn btn-secondary">Cancel</a>
                 </div>
             </form>
         </div>
     </div>
+    
+    <script>
+        function toggleMenu() {
+            document.getElementById('mobileMenu').classList.toggle('active');
+        }
+        document.addEventListener('click', function(event) {
+            const menu = document.getElementById('mobileMenu');
+            const hamburger = document.querySelector('.hamburger');
+            if (!menu.contains(event.target) && !hamburger.contains(event.target)) {
+                menu.classList.remove('active');
+            }
+        });
+    </script>
 </body>
 </html>
