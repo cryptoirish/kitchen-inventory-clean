@@ -702,72 +702,58 @@ def billing_portal():
 
 # HACCP Dashboard
 @app.route('/haccp')
-# @login_required
+@login_required
 def haccp_dashboard():
     try:
         org_id = get_current_org_id()
         conn = get_db()
         cur = conn.cursor()
         
-        # Today's temp checks
-        cur.execute('''
-            SELECT COUNT(*) as count FROM temperature_logs 
-            WHERE organization_id = %s AND DATE(logged_at) = CURRENT_DATE
-        ''', (org_id,))
-        today_temps = cur.fetchone()['count']
-        
-        # Failed temp checks this week
-        cur.execute('''
-            SELECT COUNT(*) as count FROM temperature_logs 
-            WHERE organization_id = %s AND status = 'fail' 
-            AND logged_at >= CURRENT_DATE - INTERVAL '7 days'
-        ''', (org_id,))
-        failed_temps = cur.fetchone()['count']
-        
-        # Cleaning tasks today
-        cur.execute('''
-            SELECT COUNT(*) as count FROM cleaning_records 
-            WHERE organization_id = %s AND DATE(completed_at) = CURRENT_DATE
-        ''', (org_id,))
-        today_cleanings = cur.fetchone()['count']
-        
         # Equipment count
-        cur.execute('SELECT COUNT(*) as count FROM equipment WHERE organization_id = %s AND is_active = true', (org_id,))
+        cur.execute('SELECT COUNT(*) as count FROM haccp_equipment WHERE organization_id = %s AND is_active = true', (org_id,))
         equipment_count = cur.fetchone()['count']
+        
+        # Temperature checks in the last 24 hours
+        cur.execute("SELECT COUNT(*) as count FROM haccp_temperature_logs WHERE organization_id = %s AND logged_at >= NOW() - INTERVAL '24 hours'", (org_id,))
+        temps_today = cur.fetchone()['count']
+        
+        # Failed temperature checks this week
+        cur.execute("SELECT COUNT(*) as count FROM haccp_temperature_logs WHERE organization_id = %s AND status = 'fail' AND logged_at >= NOW() - INTERVAL '7 days'", (org_id,))
+        temp_failures = cur.fetchone()['count']
+        
+        # Active cleaning tasks
+        cur.execute('SELECT COUNT(*) as count FROM haccp_cleaning_tasks WHERE organization_id = %s AND is_active = true', (org_id,))
+        cleaning_tasks = cur.fetchone()['count']
+        
+        # Deliveries this week
+        cur.execute("SELECT COUNT(*) as count FROM haccp_delivery_logs WHERE organization_id = %s AND created_at >= NOW() - INTERVAL '7 days'", (org_id,))
+        deliveries_week = cur.fetchone()['count']
         
         # Recent temperature logs
         cur.execute('''
-            SELECT * FROM temperature_logs 
-            WHERE organization_id = %s 
-            ORDER BY logged_at DESC LIMIT 5
+            SELECT tl.*, e.name as equipment_name, e.equipment_type, e.min_temp, e.max_temp
+            FROM haccp_temperature_logs tl
+            JOIN haccp_equipment e ON tl.equipment_id = e.id
+            WHERE tl.organization_id = %s
+            ORDER BY tl.logged_at DESC
+            LIMIT 10
         ''', (org_id,))
         recent_temps = cur.fetchall()
-        
-        # Recent cleanings
-        cur.execute('''
-            SELECT cr.*, ct.task_name 
-            FROM cleaning_records cr
-            JOIN cleaning_tasks ct ON cr.task_id = ct.id
-            WHERE cr.organization_id = %s
-            ORDER BY cr.completed_at DESC LIMIT 5
-        ''', (org_id,))
-        recent_cleanings = cur.fetchall()
         
         cur.close()
         conn.close()
         
         return render_template('haccp_dashboard.html',
-                             today_temps=today_temps,
-                             failed_temps=failed_temps,
-                             today_cleanings=today_cleanings,
                              equipment_count=equipment_count,
-                             recent_temps=recent_temps,
-                             recent_cleanings=recent_cleanings)
+                             temps_today=temps_today,
+                             temp_failures=temp_failures,
+                             cleaning_tasks=cleaning_tasks,
+                             deliveries_week=deliveries_week,
+                             recent_temps=recent_temps)
     except Exception as e:
         print(f"HACCP dashboard error: {e}")
         traceback.print_exc()
-        flash('Error loading HACCP dashboard', 'danger')
-        return redirect('/')
+        return f"Error: {str(e)}", 500
 
 # Temperature Logs
 @app.route('/haccp/temperatures')
