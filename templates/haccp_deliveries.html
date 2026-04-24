@@ -121,12 +121,11 @@
                         <div class="temp-inputs">
                             <div class="form-group">
                                 <label>Chilled compartment (°C) <span class="help-text">target ≤ 8°C</span></label>
-                                <input type="number" name="chilled_temp" step="0.1" placeholder="e.g. 4.0">
-                            </div>
+                                <input type="text" inputmode="decimal" name="chilled_temp" pattern="-?[0-9]*\.?[0-9]+" placeholder="e.g. 4.0">
+                         <div>
                             <div class="form-group">
                                 <label>Frozen compartment (°C) <span class="help-text">target ≤ −18°C</span></label>
-                                <input type="number" name="frozen_temp" step="0.1" placeholder="e.g. -20.0">
-                            </div>
+                                <input type="text" inputmode="decimal" name="frozen_temp" pattern="-?[0-9]*\.?[0-9]+" placeholder="e.g. -20.0">
                         </div>
                     </div>
 
@@ -211,11 +210,11 @@
                         <div class="temp-inputs">
                             <div class="form-group">
                                 <label>Chilled compartment (°C) <span class="help-text">target ≤ 8°C</span></label>
-                                <input type="number" name="chilled_temp" id="ed_chilled" step="0.1">
+                                <input type="text" inputmode="decimal" name="chilled_temp" id="ed_chilled" pattern="-?[0-9]*\.?[0-9]+">
                             </div>
                             <div class="form-group">
                                 <label>Frozen compartment (°C) <span class="help-text">target ≤ −18°C</span></label>
-                                <input type="number" name="frozen_temp" id="ed_frozen" step="0.1">
+                                <input type="text" inputmode="decimal" name="frozen_temp" id="ed_frozen" pattern="-?[0-9]*\.?[0-9]+">
                             </div>
                         </div>
                     </div>
