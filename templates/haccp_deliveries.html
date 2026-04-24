@@ -57,6 +57,11 @@
         .temp-section-title { font-weight: 600; font-size: 13px; margin-bottom: 10px; color: #2c5282; }
         .temp-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .row-actions { display: flex; gap: 6px; }
+        .temp-input-group { display: flex; gap: 6px; align-items: stretch; }
+        .temp-input-group input { flex: 1; min-width: 0; }
+        .sign-toggle { background: #2c5282; color: #fff; border: none; border-radius: 6px; padding: 0 14px; font-size: 18px; font-weight: 700; cursor: pointer; min-width: 48px; flex-shrink: 0; }
+        .sign-toggle.negative { background: #e74c3c; }
+        .sign-toggle:active { opacity: 0.8; }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
         .modal-overlay.active { display: flex; }
         .modal { background: #fff; border-radius: 10px; padding: 25px; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; }
@@ -121,11 +126,17 @@
                         <div class="temp-inputs">
                             <div class="form-group">
                                 <label>Chilled compartment (°C) <span class="help-text">target ≤ 8°C</span></label>
-                                <input type="text" inputmode="decimal" name="chilled_temp" pattern="-?[0-9]*\.?[0-9]+" placeholder="e.g. 4.0">
+                                <div class="temp-input-group">
+                                    <button type="button" class="sign-toggle" data-target="new_chilled" data-sign="+">+</button>
+                                    <input type="number" inputmode="decimal" name="chilled_temp" id="new_chilled" step="0.1" min="0" placeholder="e.g. 4.0">
+                                </div>
                             </div>
                             <div class="form-group">
-                                <label>Frozen compartment (°C) <span class="help-text">target ≤ −18°C</span></label>
-                                <input type="text" inputmode="decimal" name="frozen_temp" pattern="-?[0-9]*\.?[0-9]+" placeholder="e.g. -20.0">
+                                <label>Frozen compartment (°C) <span class="help-text">target ≤ −18°C — tap − first</span></label>
+                                <div class="temp-input-group">
+                                    <button type="button" class="sign-toggle negative" data-target="new_frozen" data-sign="-">−</button>
+                                    <input type="number" inputmode="decimal" name="frozen_temp" id="new_frozen" step="0.1" min="0" placeholder="e.g. 20.0">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -141,7 +152,7 @@
                         <textarea name="notes" rows="2" placeholder="Any issues, corrective action taken, or comments"></textarea>
                     </div>
                 </div>
-                <button type="submit" class="btn" style="margin-top: 15px;">Log Delivery</button>
+                <button type="submit" class="btn" style="margin-top: 15px;" onclick="applySigns(this.form)">Log Delivery</button>
             </form>
         </div>
 
@@ -211,11 +222,17 @@
                         <div class="temp-inputs">
                             <div class="form-group">
                                 <label>Chilled compartment (°C) <span class="help-text">target ≤ 8°C</span></label>
-                                <input type="text" inputmode="decimal" name="chilled_temp" id="ed_chilled" pattern="-?[0-9]*\.?[0-9]+">
+                                <div class="temp-input-group">
+                                    <button type="button" class="sign-toggle" data-target="ed_chilled" data-sign="+">+</button>
+                                    <input type="number" inputmode="decimal" name="chilled_temp" id="ed_chilled" step="0.1" min="0">
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label>Frozen compartment (°C) <span class="help-text">target ≤ −18°C</span></label>
-                                <input type="text" inputmode="decimal" name="frozen_temp" id="ed_frozen" pattern="-?[0-9]*\.?[0-9]+">
+                                <div class="temp-input-group">
+                                    <button type="button" class="sign-toggle" data-target="ed_frozen" data-sign="+">+</button>
+                                    <input type="number" inputmode="decimal" name="frozen_temp" id="ed_frozen" step="0.1" min="0">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -233,7 +250,7 @@
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeModal('editDeliveryModal')">Cancel</button>
-                    <button type="submit" class="btn">Save Changes</button>
+                    <button type="submit" class="btn" onclick="applySigns(this.form)">Save Changes</button>
                 </div>
             </form>
         </div>
@@ -242,12 +259,51 @@
     <script>
         function toggleMenu() { document.getElementById('mobileMenu').classList.toggle('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        // Sign toggle logic
+        document.querySelectorAll('.sign-toggle').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const isNeg = this.dataset.sign === '-';
+                this.dataset.sign = isNeg ? '+' : '-';
+                this.textContent = isNeg ? '+' : '−';
+                this.classList.toggle('negative');
+            });
+        });
+
+        // Apply the sign to the input value on submit
+        function applySigns(form) {
+            form.querySelectorAll('.sign-toggle').forEach(btn => {
+                const input = document.getElementById(btn.dataset.target);
+                if (input && input.value && btn.dataset.sign === '-') {
+                    const v = parseFloat(input.value);
+                    if (!isNaN(v) && v > 0) input.value = -v;
+                }
+            });
+            return true;
+        }
+
+        function setSignToggle(targetId, value) {
+            const btn = document.querySelector('.sign-toggle[data-target="' + targetId + '"]');
+            if (!btn) return;
+            if (value !== null && value < 0) {
+                btn.dataset.sign = '-';
+                btn.textContent = '−';
+                btn.classList.add('negative');
+            } else {
+                btn.dataset.sign = '+';
+                btn.textContent = '+';
+                btn.classList.remove('negative');
+            }
+        }
+
         function openEditDelivery(id, supplier, date, chilled, frozen, pack, dates, quality, accepted, notes) {
             document.getElementById('editDeliveryForm').action = '/haccp/deliveries/edit/' + id;
             document.getElementById('ed_supplier').value = supplier;
             document.getElementById('ed_date').value = date;
-            document.getElementById('ed_chilled').value = chilled === null ? '' : chilled;
-            document.getElementById('ed_frozen').value = frozen === null ? '' : frozen;
+            document.getElementById('ed_chilled').value = chilled === null ? '' : Math.abs(chilled);
+            document.getElementById('ed_frozen').value = frozen === null ? '' : Math.abs(frozen);
+            setSignToggle('ed_chilled', chilled);
+            setSignToggle('ed_frozen', frozen);
             document.getElementById('ed_pack').checked = pack;
             document.getElementById('ed_dates').checked = dates;
             document.getElementById('ed_qual').checked = quality;
@@ -255,6 +311,7 @@
             document.getElementById('ed_notes').value = notes;
             document.getElementById('editDeliveryModal').classList.add('active');
         }
+
         document.querySelectorAll('.modal-overlay').forEach(m => {
             m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
         });
