@@ -61,6 +61,11 @@
         .equipment-name { font-weight: 600; margin-bottom: 4px; }
         .equipment-meta { font-size: 12px; color: #718096; }
         .equipment-actions { display: flex; gap: 6px; }
+        .temp-input-group { display: flex; gap: 6px; align-items: stretch; }
+        .temp-input-group input { flex: 1; min-width: 0; }
+        .sign-toggle { background: #2c5282; color: #fff; border: none; border-radius: 6px; padding: 0 14px; font-size: 18px; font-weight: 700; cursor: pointer; min-width: 48px; flex-shrink: 0; }
+        .sign-toggle.negative { background: #e74c3c; }
+        .sign-toggle:active { opacity: 0.8; }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
         .modal-overlay.active { display: flex; }
         .modal { background: #fff; border-radius: 10px; padding: 25px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; }
@@ -126,8 +131,11 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Temperature (°C) *</label>
-                        <input type="text" inputmode="decimal" name="temperature" pattern="-?[0-9]*\.?[0-9]+" required>
+                        <label>Temperature (°C) * <span style="font-size:12px; color:#718096; font-weight:normal;">tap − for minus</span></label>
+                        <div class="temp-input-group">
+                            <button type="button" class="sign-toggle" data-target="log_temp" data-sign="+">+</button>
+                            <input type="number" inputmode="decimal" name="temperature" id="log_temp" step="0.1" min="0" required>
+                        </div>
                     </div>
                     <div class="form-group full">
                         <label>Notes</label>
@@ -138,7 +146,7 @@
                         <textarea name="corrective_action" rows="2" placeholder="What action was taken?"></textarea>
                     </div>
                 </div>
-                <button type="submit" class="btn" style="margin-top: 15px;">Log Temperature</button>
+                <button type="submit" class="btn" style="margin-top: 15px;" onclick="applySigns(this.form)">Log Temperature</button>
             </form>
             {% else %}
             <p class="empty">No equipment added yet. Switch to the "Manage Equipment" tab to add your first fridge, freezer or oven.</p>
@@ -197,14 +205,20 @@
                     </div>
                     <div class="form-group">
                         <label>Min temp (°C)</label>
-                        <input type="text" inputmode="decimal" name="min_temp" pattern="-?[0-9]*\.?[0-9]+">
+                        <div class="temp-input-group">
+                            <button type="button" class="sign-toggle" data-target="add_min" data-sign="+">+</button>
+                            <input type="number" inputmode="decimal" name="min_temp" id="add_min" step="0.1" min="0">
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>Max temp (°C)</label>
-                        <input type="text" inputmode="decimal" name="max_temp" pattern="-?[0-9]*\.?[0-9]+">
+                        <div class="temp-input-group">
+                            <button type="button" class="sign-toggle" data-target="add_max" data-sign="+">+</button>
+                            <input type="number" inputmode="decimal" name="max_temp" id="add_max" step="0.1" min="0">
+                        </div>
                     </div>
                 </div>
-                <button type="submit" class="btn" style="margin-top: 15px;">Add Equipment</button>
+                <button type="submit" class="btn" style="margin-top: 15px;" onclick="applySigns(this.form)">Add Equipment</button>
             </form>
         </div>
 
@@ -273,16 +287,22 @@
                     </div>
                     <div class="form-group">
                         <label>Min temp (°C)</label>
-                        <input type="text" inputmode="decimal" name="min_temp" id="edit_min" pattern="-?[0-9]*\.?[0-9]+">
+                        <div class="temp-input-group">
+                            <button type="button" class="sign-toggle" data-target="edit_min" data-sign="+">+</button>
+                            <input type="number" inputmode="decimal" name="min_temp" id="edit_min" step="0.1" min="0">
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>Max temp (°C)</label>
-                        <input type="text" inputmode="decimal" name="max_temp" id="edit_max" pattern="-?[0-9]*\.?[0-9]+">
+                        <div class="temp-input-group">
+                            <button type="button" class="sign-toggle" data-target="edit_max" data-sign="+">+</button>
+                            <input type="number" inputmode="decimal" name="max_temp" id="edit_max" step="0.1" min="0">
+                        </div>
                     </div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeModal('editEquipmentModal')">Cancel</button>
-                    <button type="submit" class="btn">Save Changes</button>
+                    <button type="submit" class="btn" onclick="applySigns(this.form)">Save Changes</button>
                 </div>
             </form>
         </div>
@@ -315,13 +335,50 @@
             document.getElementById('equipment-panel').style.display = name === 'equipment' ? 'block' : 'none';
         }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        document.querySelectorAll('.sign-toggle').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const isNeg = this.dataset.sign === '-';
+                this.dataset.sign = isNeg ? '+' : '-';
+                this.textContent = isNeg ? '+' : '−';
+                this.classList.toggle('negative');
+            });
+        });
+
+        function applySigns(form) {
+            form.querySelectorAll('.sign-toggle').forEach(btn => {
+                const input = document.getElementById(btn.dataset.target);
+                if (input && input.value && btn.dataset.sign === '-') {
+                    const v = parseFloat(input.value);
+                    if (!isNaN(v) && v > 0) input.value = -v;
+                }
+            });
+            return true;
+        }
+
+        function setSignToggle(targetId, value) {
+            const btn = document.querySelector('.sign-toggle[data-target="' + targetId + '"]');
+            if (!btn) return;
+            if (value !== null && value < 0) {
+                btn.dataset.sign = '-';
+                btn.textContent = '−';
+                btn.classList.add('negative');
+            } else {
+                btn.dataset.sign = '+';
+                btn.textContent = '+';
+                btn.classList.remove('negative');
+            }
+        }
+
         function openEditEquipment(id, name, type, location, minTemp, maxTemp) {
             document.getElementById('editEquipmentForm').action = '/haccp/equipment/edit/' + id;
             document.getElementById('edit_name').value = name;
             document.getElementById('edit_type').value = type;
             document.getElementById('edit_location').value = location;
-            document.getElementById('edit_min').value = minTemp === null ? '' : minTemp;
-            document.getElementById('edit_max').value = maxTemp === null ? '' : maxTemp;
+            document.getElementById('edit_min').value = minTemp === null ? '' : Math.abs(minTemp);
+            document.getElementById('edit_max').value = maxTemp === null ? '' : Math.abs(maxTemp);
+            setSignToggle('edit_min', minTemp);
+            setSignToggle('edit_max', maxTemp);
             document.getElementById('editEquipmentModal').classList.add('active');
         }
         function openVoidTemp(id) {
