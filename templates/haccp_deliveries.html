@@ -128,14 +128,14 @@
                                 <label>Chilled compartment (°C) <span class="help-text">target ≤ 8°C</span></label>
                                 <div class="temp-input-group">
                                     <button type="button" class="sign-toggle" data-target="new_chilled" data-sign="+">+</button>
-                                    <input type="number" inputmode="decimal" name="chilled_temp" id="new_chilled" step="0.1" min="0" placeholder="e.g. 4.0">
+                                    <input type="number" inputmode="decimal" name="chilled_temp" id="new_chilled" step="0.1" placeholder="e.g. 4.0">
                                 </div>
                             </div>
                             <div class="form-group">
                                 <label>Frozen compartment (°C) <span class="help-text">target ≤ −18°C — tap − first</span></label>
                                 <div class="temp-input-group">
                                     <button type="button" class="sign-toggle negative" data-target="new_frozen" data-sign="-">−</button>
-                                    <input type="number" inputmode="decimal" name="frozen_temp" id="new_frozen" step="0.1" min="0" placeholder="e.g. 20.0">
+                                    <input type="number" inputmode="decimal" name="frozen_temp" id="new_frozen" step="0.1" placeholder="e.g. 20.0">
                                 </div>
                             </div>
                         </div>
@@ -224,14 +224,14 @@
                                 <label>Chilled compartment (°C) <span class="help-text">target ≤ 8°C</span></label>
                                 <div class="temp-input-group">
                                     <button type="button" class="sign-toggle" data-target="ed_chilled" data-sign="+">+</button>
-                                    <input type="number" inputmode="decimal" name="chilled_temp" id="ed_chilled" step="0.1" min="0">
+                                    <input type="number" inputmode="decimal" name="chilled_temp" id="ed_chilled" step="0.1">
                                 </div>
                             </div>
                             <div class="form-group">
                                 <label>Frozen compartment (°C) <span class="help-text">target ≤ −18°C</span></label>
                                 <div class="temp-input-group">
                                     <button type="button" class="sign-toggle" data-target="ed_frozen" data-sign="+">+</button>
-                                    <input type="number" inputmode="decimal" name="frozen_temp" id="ed_frozen" step="0.1" min="0">
+                                    <input type="number" inputmode="decimal" name="frozen_temp" id="ed_frozen" step="0.1">
                                 </div>
                             </div>
                         </div>
@@ -260,7 +260,6 @@
         function toggleMenu() { document.getElementById('mobileMenu').classList.toggle('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-        // Sign toggle logic
         document.querySelectorAll('.sign-toggle').forEach(btn => {
             btn.addEventListener('click', function() {
                 const isNeg = this.dataset.sign === '-';
@@ -270,7 +269,6 @@
             });
         });
 
-        // Apply the sign to the input value on submit
         function applySigns(form) {
             form.querySelectorAll('.sign-toggle').forEach(btn => {
                 const input = document.getElementById(btn.dataset.target);
