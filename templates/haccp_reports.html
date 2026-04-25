@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HACCP Reports - YieldGuard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f6fa; color: #2c3e50; }
+        .navbar { background: #fff; border-bottom: 1px solid #e1e4e8; padding: 0 20px; position: sticky; top: 0; z-index: 100; }
+        .nav-container { max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 64px; }
+        .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #2c3e50; font-weight: 700; font-size: 20px; }
+        .logo-icon { font-size: 28px; }
+        .nav-links { display: flex; gap: 24px; }
+        .nav-links a { text-decoration: none; color: #4a5568; font-weight: 500; font-size: 14px; }
+        .nav-links a:hover { color: #27ae60; }
+        .hamburger { display: none; background: none; border: none; cursor: pointer; flex-direction: column; gap: 4px; }
+        .hamburger span { display: block; width: 24px; height: 2px; background: #2c3e50; }
+        .mobile-menu { display: none; position: absolute; top: 64px; left: 0; right: 0; background: #fff; border-bottom: 1px solid #e1e4e8; padding: 10px 0; }
+        .mobile-menu.active { display: block; }
+        .mobile-menu a { display: block; padding: 12px 20px; text-decoration: none; color: #4a5568; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 30px 20px; }
+        .page-header { margin-bottom: 30px; }
+        .page-header h1 { font-size: 28px; margin-bottom: 6px; }
+        .page-subtitle { color: #718096; font-size: 14px; }
+        .back-link { color: #27ae60; text-decoration: none; font-size: 14px; margin-bottom: 15px; display: inline-block; }
+        .card { background: #fff; border-radius: 10px; padding: 25px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .card h2 { font-size: 18px; margin-bottom: 8px; }
+        .card-desc { font-size: 13px; color: #718096; margin-bottom: 18px; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        label { font-size: 13px; font-weight: 500; color: #4a5568; }
+        input { padding: 10px 12px; border: 1px solid #e1e4e8; border-radius: 6px; font-size: 14px; font-family: inherit; }
+        input:focus { outline: none; border-color: #27ae60; }
+        .date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+        .quick-ranges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 15px; }
+        .quick-btn { background: #edf2f7; border: 1px solid #e1e4e8; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; color: #2c3e50; }
+        .quick-btn:hover { background: #e2e8f0; }
+        .warn-banner { background: #fef3c7; border: 1px solid #fbbf24; color: #78350f; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; }
+        .warn-banner a { color: #78350f; font-weight: 600; text-decoration: underline; }
+        .export-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; }
+        .export-card { border: 2px solid #e1e4e8; border-radius: 10px; padding: 20px; text-align: center; text-decoration: none; color: #2c3e50; transition: all 0.15s; }
+        .export-card:hover { border-color: #27ae60; background: #f0fdf4; transform: translateY(-1px); }
+        .export-card.primary { border-color: #27ae60; background: #f0fdf4; }
+        .export-card.primary:hover { background: #dcfce7; }
+        .export-icon { font-size: 40px; margin-bottom: 8px; }
+        .export-title { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+        .export-desc { font-size: 12px; color: #718096; }
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .hamburger { display: flex; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo"><div class="logo-icon">🍳</div><div>YieldGuard</div></a>
+            <div class="nav-links">
+                <a href="/">Dashboard</a><a href="/inventory">Inventory</a><a href="/recipes">Recipes</a>
+                <a href="/haccp" style="color: #27ae60;">HACCP</a><a href="/alerts">Alerts</a>
+                <a href="/billing">Billing</a><a href="/logout">Logout</a>
+            </div>
+            <button class="hamburger" onclick="toggleMenu()"><span></span><span></span><span></span></button>
+        </div>
+        <div class="mobile-menu" id="mobileMenu">
+            <a href="/">📊 Dashboard</a><a href="/inventory">📦 Inventory</a><a href="/recipes">🍽️ Recipes</a>
+            <a href="/haccp">🛡️ HACCP</a><a href="/alerts">⚠️ Alerts</a><a href="/billing">💳 Billing</a><a href="/logout">🚪 Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <a href="/haccp" class="back-link">← Back to HACCP</a>
+        <div class="page-header">
+            <h1>📄 HACCP Reports</h1>
+            <p class="page-subtitle">Generate audit-ready PDF exports for EHO / FSAI inspections</p>
+        </div>
+
+        {% if not org.business_name or not org.food_business_registration %}
+        <div class="warn-banner">
+            ⚠️ <strong>Business details incomplete.</strong> Your reports will still generate, but for professional audit-grade exports, please <a href="/settings/business">complete your business settings</a> (trading name, FBO registration, responsible person).
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <h2>Select Date Range</h2>
+            <p class="card-desc">Pick the period you want to export. Defaults to the last 30 days.</p>
+
+            <div class="quick-ranges">
+                <button type="button" class="quick-btn" onclick="setRange(7)">Last 7 days</button>
+                <button type="button" class="quick-btn" onclick="setRange(30)">Last 30 days</button>
+                <button type="button" class="quick-btn" onclick="setRange(90)">Last 90 days</button>
+                <button type="button" class="quick-btn" onclick="setRange(365)">Last 12 months</button>
+            </div>
+
+            <div class="date-row">
+                <div class="form-group">
+                    <label>From</label>
+                    <input type="date" id="date_from" value="{{ default_from }}">
+                </div>
+                <div class="form-group">
+                    <label>To</label>
+                    <input type="date" id="date_to" value="{{ default_to }}">
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Generate Report</h2>
+            <p class="card-desc">Click a tile to download. Reports open in a new tab and save as PDF.</p>
+
+            <div class="export-grid">
+                <a id="link_full" href="#" target="_blank" class="export-card primary">
+                    <div class="export-icon">📋</div>
+                    <div class="export-title">Full HACCP Report</div>
+                    <div class="export-desc">Everything in one document — the one to hand to an EHO</div>
+                </a>
+                <a id="link_temps" href="#" target="_blank" class="export-card">
+                    <div class="export-icon">🌡️</div>
+                    <div class="export-title">Temperature Logs</div>
+                    <div class="export-desc">Equipment readings, ranges, and voided entries</div>
+                </a>
+                <a id="link_cleaning" href="#" target="_blank" class="export-card">
+                    <div class="export-icon">🧹</div>
+                    <div class="export-title">Cleaning Logs</div>
+                    <div class="export-desc">Completed tasks with dates, chemicals, signatures</div>
+                </a>
+                <a id="link_deliveries" href="#" target="_blank" class="export-card">
+                    <div class="export-icon">📦</div>
+                    <div class="export-title">Delivery Inspections</div>
+                    <div class="export-desc">Supplier deliveries with chilled/frozen temps</div>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleMenu() { document.getElementById('mobileMenu').classList.toggle('active'); }
+
+        function updateLinks() {
+            const from = document.getElementById('date_from').value;
+            const to = document.getElementById('date_to').value;
+            const qs = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+            document.getElementById('link_full').href = '/haccp/reports/full.pdf' + qs;
+            document.getElementById('link_temps').href = '/haccp/reports/temperatures.pdf' + qs;
+            document.getElementById('link_cleaning').href = '/haccp/reports/cleaning.pdf' + qs;
+            document.getElementById('link_deliveries').href = '/haccp/reports/deliveries.pdf' + qs;
+        }
+
+        function setRange(days) {
+            const today = new Date();
+            const from = new Date();
+            from.setDate(today.getDate() - days);
+            document.getElementById('date_from').value = from.toISOString().split('T')[0];
+            document.getElementById('date_to').value = today.toISOString().split('T')[0];
+            updateLinks();
+        }
+
+        document.getElementById('date_from').addEventListener('change', updateLinks);
+        document.getElementById('date_to').addEventListener('change', updateLinks);
+        updateLinks();
+    </script>
+</body>
+</html>
