@@ -3,12 +3,19 @@ import psycopg
 from psycopg.rows import dict_row
 import os
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import csv
 from io import StringIO
 import stripe
+from io import BytesIO
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.enums import TA_CENTER
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -320,8 +327,8 @@ def export_inventory():
                 f"{item['stock']:.2f}",
                 item['unit'],
                 f"{item['reorder_point']:.2f}",
-                f"Â£{item['cost']:.2f}",
-                f"Â£{item['total_value']:.2f}",
+                f"£{item['cost']:.2f}",
+                f"£{item['total_value']:.2f}",
                 item['status']
             ])
         
@@ -668,7 +675,7 @@ def billing_success():
             conn.commit()
             cur.close()
             conn.close()
-            flash(f'ðŸŽ‰ Welcome! Your {PLANS[plan]["name"]} plan is active. 14-day free trial started.', 'success')
+            flash(f'🎉 Welcome! Your {PLANS[plan]["name"]} plan is active. 14-day free trial started.', 'success')
         return redirect('/billing')
     except Exception as e:
         print(f"Success error: {e}")
@@ -847,9 +854,9 @@ def log_temperature():
         conn.close()
 
         if status == 'fail':
-            flash(f'âš ï¸ Temperature {temp}Â°C is OUT OF RANGE! Log corrective action.', 'danger')
+            flash(f'⚠️ Temperature {temp}°C is OUT OF RANGE! Log corrective action.', 'danger')
         else:
-            flash(f'âœ… Temperature {temp}Â°C logged successfully', 'success')
+            flash(f'✅ Temperature {temp}°C logged successfully', 'success')
 
         return redirect('/haccp/temperatures')
     except Exception as e:
@@ -972,14 +979,13 @@ def add_delivery():
         conn = get_db()
         cur = conn.cursor()
         cur.execute('''
-            INSERT INTO haccp_delivery_logs (organization_id, supplier_name, delivery_date, chilled_temp, frozen_temp, packaging_ok, expiry_dates_ok, quality_ok, accepted, notes, inspected_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO haccp_delivery_logs (organization_id, supplier_name, delivery_date, temperature_check, packaging_ok, expiry_dates_ok, quality_ok, accepted, notes, inspected_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (
             org_id,
             request.form['supplier_name'],
             request.form['delivery_date'],
-            float(request.form['chilled_temp']) if request.form.get('chilled_temp') else None,
-            float(request.form['frozen_temp']) if request.form.get('frozen_temp') else None,
+            float(request.form['temperature_check']) if request.form.get('temperature_check') else None,
             request.form.get('packaging_ok') == 'on',
             request.form.get('expiry_dates_ok') == 'on',
             request.form.get('quality_ok') == 'on',
@@ -996,6 +1002,7 @@ def add_delivery():
         print(f"Add delivery error: {e}")
         flash('Error logging delivery', 'danger')
         return redirect('/haccp/deliveries')
+
 # HACCP EDIT / DELETE / VOID ROUTES
 
 # --- Equipment: edit and soft-delete ---
@@ -1223,5 +1230,388 @@ def delete_delivery(id):
         print(f"Delete delivery error: {e}")
         flash('Error deleting delivery', 'danger')
         return redirect('/haccp/deliveries')
+
+
+# BUSINESS SETTINGS
+
+@app.route('/settings/business')
+@login_required
+def business_settings():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM organizations WHERE id = %s', (org_id,))
+        org = cur.fetchone()
+        cur.close()
+        conn.close()
+        return render_template('business_settings.html', org=org)
+    except Exception as e:
+        print(f"Business settings error: {e}")
+        return f"Error: {str(e)}", 500
+
+
+@app.route('/settings/business/save', methods=['POST'])
+@login_required
+def save_business_settings():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE organizations
+            SET business_name = %s, business_address = %s, business_phone = %s,
+                business_email = %s, food_business_registration = %s,
+                responsible_person = %s, logo_url = %s
+            WHERE id = %s
+        ''', (
+            request.form.get('business_name', '').strip() or None,
+            request.form.get('business_address', '').strip() or None,
+            request.form.get('business_phone', '').strip() or None,
+            request.form.get('business_email', '').strip() or None,
+            request.form.get('food_business_registration', '').strip() or None,
+            request.form.get('responsible_person', '').strip() or None,
+            request.form.get('logo_url', '').strip() or None,
+            org_id
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Business details saved!', 'success')
+        return redirect('/settings/business')
+    except Exception as e:
+        print(f"Save business settings error: {e}")
+        flash('Error saving details', 'danger')
+        return redirect('/settings/business')
+
+
+# HACCP REPORTS (PDF EXPORTS)
+
+@app.route('/haccp/reports')
+@login_required
+def haccp_reports():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM organizations WHERE id = %s', (org_id,))
+        org = cur.fetchone()
+        cur.close()
+        conn.close()
+        today = datetime.now().date()
+        thirty_days_ago = today - timedelta(days=30)
+        return render_template('haccp_reports.html',
+                             org=org,
+                             default_from=thirty_days_ago.strftime('%Y-%m-%d'),
+                             default_to=today.strftime('%Y-%m-%d'))
+    except Exception as e:
+        print(f"Reports page error: {e}")
+        return f"Error: {str(e)}", 500
+
+
+def _parse_date_range():
+    """Parse from/to dates from request.args, default to last 30 days."""
+    today = datetime.now().date()
+    try:
+        date_to = datetime.strptime(request.args.get('to', today.strftime('%Y-%m-%d')), '%Y-%m-%d').date()
+    except ValueError:
+        date_to = today
+    try:
+        date_from = datetime.strptime(request.args.get('from', (today - timedelta(days=30)).strftime('%Y-%m-%d')), '%Y-%m-%d').date()
+    except ValueError:
+        date_from = today - timedelta(days=30)
+    return date_from, date_to
+
+
+def _get_org(cur, org_id):
+    cur.execute('SELECT * FROM organizations WHERE id = %s', (org_id,))
+    return cur.fetchone()
+
+
+def _pdf_styles():
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name='HeaderTitle', fontSize=16, textColor=colors.HexColor('#2c3e50'), fontName='Helvetica-Bold', spaceAfter=4))
+    styles.add(ParagraphStyle(name='HeaderSub', fontSize=9, textColor=colors.HexColor('#4a5568'), spaceAfter=2))
+    styles.add(ParagraphStyle(name='ReportTitle', fontSize=18, textColor=colors.HexColor('#27ae60'), fontName='Helvetica-Bold', alignment=TA_CENTER, spaceAfter=6, spaceBefore=10))
+    styles.add(ParagraphStyle(name='ReportMeta', fontSize=10, textColor=colors.HexColor('#718096'), alignment=TA_CENTER, spaceAfter=14))
+    styles.add(ParagraphStyle(name='SectionHead', fontSize=13, textColor=colors.HexColor('#2c3e50'), fontName='Helvetica-Bold', spaceBefore=10, spaceAfter=8))
+    styles.add(ParagraphStyle(name='FooterNote', fontSize=8, textColor=colors.HexColor('#718096'), alignment=TA_CENTER))
+    return styles
+
+
+def _build_header(org, styles):
+    """Return a list of flowables for the business header."""
+    flow = []
+    business_name = (org.get('business_name') if org else None) or (org.get('name') if org else None) or 'Food Business'
+    flow.append(Paragraph(business_name, styles['HeaderTitle']))
+    if org:
+        if org.get('business_address'):
+            flow.append(Paragraph(org['business_address'].replace('\n', '<br/>'), styles['HeaderSub']))
+        contact_bits = []
+        if org.get('business_phone'): contact_bits.append(f"Tel: {org['business_phone']}")
+        if org.get('business_email'): contact_bits.append(f"Email: {org['business_email']}")
+        if contact_bits:
+            flow.append(Paragraph(' &nbsp;&bull;&nbsp; '.join(contact_bits), styles['HeaderSub']))
+        if org.get('food_business_registration'):
+            flow.append(Paragraph(f"<b>FBO Registration:</b> {org['food_business_registration']}", styles['HeaderSub']))
+    flow.append(Spacer(1, 0.3*cm))
+    return flow
+
+
+def _build_footer_text(org):
+    parts = ['Generated by YieldGuard', datetime.now().strftime('%d %b %Y %H:%M')]
+    if org and org.get('responsible_person'):
+        parts.append(f"Responsible person: {org['responsible_person']}")
+    return ' &nbsp;&bull;&nbsp; '.join(parts)
+
+
+def _table_style(header_bg='#2c5282'):
+    return TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor(header_bg)),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,0), 9),
+        ('FONTSIZE', (0,1), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,0), 8),
+        ('TOPPADDING', (0,0), (-1,0), 6),
+        ('BOTTOMPADDING', (0,1), (-1,-1), 5),
+        ('TOPPADDING', (0,1), (-1,-1), 5),
+        ('GRID', (0,0), (-1,-1), 0.25, colors.HexColor('#cbd5e0')),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f7fafc')]),
+    ])
+
+
+def _generate_pdf(title, org, date_from, date_to, content_builders):
+    """content_builders = list of functions taking (styles) -> list of flowables."""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                          leftMargin=1.5*cm, rightMargin=1.5*cm,
+                          topMargin=1.5*cm, bottomMargin=1.5*cm)
+    styles = _pdf_styles()
+    story = []
+    story.extend(_build_header(org, styles))
+    story.append(Paragraph(title, styles['ReportTitle']))
+    story.append(Paragraph(f"Period: {date_from.strftime('%d %b %Y')} to {date_to.strftime('%d %b %Y')}", styles['ReportMeta']))
+    for builder in content_builders:
+        story.extend(builder(styles))
+    story.append(Spacer(1, 0.5*cm))
+    story.append(Paragraph(_build_footer_text(org), styles['FooterNote']))
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+
+def _build_temps_section(org_id, date_from, date_to):
+    def builder(styles):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT tl.logged_at, e.name as equipment_name, e.equipment_type,
+                   e.min_temp, e.max_temp, tl.temperature, tl.status,
+                   tl.logged_by, tl.notes, tl.corrective_action,
+                   tl.is_voided, tl.void_reason, tl.voided_by, tl.voided_at
+            FROM haccp_temperature_logs tl
+            JOIN haccp_equipment e ON tl.equipment_id = e.id
+            WHERE tl.organization_id = %s
+              AND tl.logged_at >= %s AND tl.logged_at < %s
+            ORDER BY tl.logged_at DESC
+        ''', (org_id, date_from, date_to + timedelta(days=1)))
+        logs = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        flow = [Paragraph('Temperature Logs', styles['SectionHead'])]
+        if not logs:
+            flow.append(Paragraph('<i>No temperature logs in this period.</i>', styles['HeaderSub']))
+            return flow
+
+        data = [['Date/Time', 'Equipment', 'Range', 'Temp', 'Status', 'By', 'Notes / Action']]
+        for log in logs:
+            range_str = f"{log['min_temp']} to {log['max_temp']}" if log['min_temp'] is not None else '-'
+            status = log['status'].upper()
+            if log['is_voided']:
+                status += ' (VOIDED)'
+            note_bits = []
+            if log['is_voided']:
+                note_bits.append(f"Voided by {log['voided_by']}: {log['void_reason']}")
+            else:
+                if log['notes']: note_bits.append(log['notes'])
+                if log['corrective_action']: note_bits.append(f"Action: {log['corrective_action']}")
+            data.append([
+                log['logged_at'].strftime('%d %b %Y %H:%M'),
+                f"{log['equipment_name']} ({log['equipment_type']})",
+                range_str,
+                f"{log['temperature']}",
+                status,
+                log['logged_by'] or '-',
+                Paragraph(' | '.join(note_bits) if note_bits else '-', styles['HeaderSub']),
+            ])
+        t = Table(data, colWidths=[2.8*cm, 3.5*cm, 2.5*cm, 1.5*cm, 2*cm, 2*cm, 4.5*cm], repeatRows=1)
+        t.setStyle(_table_style())
+        flow.append(t)
+        return flow
+    return builder
+
+
+def _build_cleaning_section(org_id, date_from, date_to):
+    def builder(styles):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT cl.completed_at, ct.task_name, ct.area, ct.frequency,
+                   ct.chemicals_used, cl.completed_by, cl.notes,
+                   cl.is_voided, cl.void_reason, cl.voided_by
+            FROM haccp_cleaning_logs cl
+            JOIN haccp_cleaning_tasks ct ON cl.task_id = ct.id
+            WHERE cl.organization_id = %s
+              AND cl.completed_at >= %s AND cl.completed_at < %s
+            ORDER BY cl.completed_at DESC
+        ''', (org_id, date_from, date_to + timedelta(days=1)))
+        logs = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        flow = [Paragraph('Cleaning Logs', styles['SectionHead'])]
+        if not logs:
+            flow.append(Paragraph('<i>No cleaning logs in this period.</i>', styles['HeaderSub']))
+            return flow
+
+        data = [['Date/Time', 'Task', 'Area', 'Frequency', 'Chemicals', 'By', 'Notes']]
+        for log in logs:
+            task = log['task_name']
+            if log['is_voided']:
+                task += ' (VOIDED)'
+            note = f"Voided by {log['voided_by']}: {log['void_reason']}" if log['is_voided'] else (log['notes'] or '-')
+            data.append([
+                log['completed_at'].strftime('%d %b %Y %H:%M'),
+                task,
+                log['area'] or '-',
+                log['frequency'] or '-',
+                log['chemicals_used'] or '-',
+                log['completed_by'] or '-',
+                Paragraph(note, styles['HeaderSub']),
+            ])
+        t = Table(data, colWidths=[2.8*cm, 3.5*cm, 2.2*cm, 2*cm, 2.5*cm, 2*cm, 3.8*cm], repeatRows=1)
+        t.setStyle(_table_style(header_bg='#27ae60'))
+        flow.append(t)
+        return flow
+    return builder
+
+
+def _build_deliveries_section(org_id, date_from, date_to):
+    def builder(styles):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT delivery_date, supplier_name, chilled_temp, frozen_temp,
+                   packaging_ok, expiry_dates_ok, quality_ok, accepted,
+                   notes, inspected_by
+            FROM haccp_delivery_logs
+            WHERE organization_id = %s
+              AND delivery_date >= %s AND delivery_date <= %s
+            ORDER BY delivery_date DESC
+        ''', (org_id, date_from, date_to))
+        deliveries = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        flow = [Paragraph('Delivery Inspections', styles['SectionHead'])]
+        if not deliveries:
+            flow.append(Paragraph('<i>No delivery inspections in this period.</i>', styles['HeaderSub']))
+            return flow
+
+        data = [['Date', 'Supplier', 'Chilled', 'Frozen', 'Pack', 'Dates', 'Quality', 'Accepted', 'By', 'Notes']]
+        for d in deliveries:
+            chilled = f"{d['chilled_temp']}" if d['chilled_temp'] is not None else '-'
+            frozen = f"{d['frozen_temp']}" if d['frozen_temp'] is not None else '-'
+            data.append([
+                d['delivery_date'].strftime('%d %b %Y'),
+                d['supplier_name'],
+                chilled, frozen,
+                'Y' if d['packaging_ok'] else 'N',
+                'Y' if d['expiry_dates_ok'] else 'N',
+                'Y' if d['quality_ok'] else 'N',
+                'Yes' if d['accepted'] else 'No',
+                d['inspected_by'] or '-',
+                Paragraph(d['notes'] or '-', styles['HeaderSub']),
+            ])
+        t = Table(data, colWidths=[2.2*cm, 3*cm, 1.5*cm, 1.5*cm, 1*cm, 1*cm, 1.3*cm, 1.5*cm, 1.8*cm, 3.2*cm], repeatRows=1)
+        t.setStyle(_table_style(header_bg='#d97706'))
+        flow.append(t)
+        return flow
+    return builder
+
+
+def _send_pdf(buffer, filename):
+    response = make_response(buffer.read())
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@app.route('/haccp/reports/temperatures.pdf')
+@login_required
+def report_temperatures_pdf():
+    org_id = get_current_org_id()
+    date_from, date_to = _parse_date_range()
+    conn = get_db()
+    cur = conn.cursor()
+    org = _get_org(cur, org_id)
+    cur.close()
+    conn.close()
+    buffer = _generate_pdf('Temperature Logs Report', org, date_from, date_to,
+                           [_build_temps_section(org_id, date_from, date_to)])
+    return _send_pdf(buffer, f"temperature-logs-{date_from}-to-{date_to}.pdf")
+
+
+@app.route('/haccp/reports/cleaning.pdf')
+@login_required
+def report_cleaning_pdf():
+    org_id = get_current_org_id()
+    date_from, date_to = _parse_date_range()
+    conn = get_db()
+    cur = conn.cursor()
+    org = _get_org(cur, org_id)
+    cur.close()
+    conn.close()
+    buffer = _generate_pdf('Cleaning Logs Report', org, date_from, date_to,
+                           [_build_cleaning_section(org_id, date_from, date_to)])
+    return _send_pdf(buffer, f"cleaning-logs-{date_from}-to-{date_to}.pdf")
+
+
+@app.route('/haccp/reports/deliveries.pdf')
+@login_required
+def report_deliveries_pdf():
+    org_id = get_current_org_id()
+    date_from, date_to = _parse_date_range()
+    conn = get_db()
+    cur = conn.cursor()
+    org = _get_org(cur, org_id)
+    cur.close()
+    conn.close()
+    buffer = _generate_pdf('Delivery Inspections Report', org, date_from, date_to,
+                           [_build_deliveries_section(org_id, date_from, date_to)])
+    return _send_pdf(buffer, f"deliveries-{date_from}-to-{date_to}.pdf")
+
+
+@app.route('/haccp/reports/full.pdf')
+@login_required
+def report_full_pdf():
+    org_id = get_current_org_id()
+    date_from, date_to = _parse_date_range()
+    conn = get_db()
+    cur = conn.cursor()
+    org = _get_org(cur, org_id)
+    cur.close()
+    conn.close()
+    buffer = _generate_pdf('HACCP Compliance Report', org, date_from, date_to, [
+        _build_temps_section(org_id, date_from, date_to),
+        _build_cleaning_section(org_id, date_from, date_to),
+        _build_deliveries_section(org_id, date_from, date_to),
+    ])
+    return _send_pdf(buffer, f"haccp-full-report-{date_from}-to-{date_to}.pdf")
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
