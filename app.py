@@ -423,9 +423,15 @@ def alerts():
         low_stock = cur.fetchall()
         cur.close()
         conn.close()
-        return render_template('alerts.html', items=low_stock)
+
+        haccp_alerts = get_compliance_alerts(org_id)
+
+        return render_template('alerts.html',
+                             items=low_stock,
+                             haccp_alerts=haccp_alerts)
     except Exception as e:
         print(f"Alerts error: {e}")
+        traceback.print_exc()
         return f"Error loading alerts: {str(e)}", 500
 
 @app.route('/recipes')
@@ -708,6 +714,166 @@ def billing_portal():
 # ========== HACCP ROUTES ==========
 
 # HACCP ROUTES
+def get_compliance_alerts(org_id):
+    """Returns a dict of categorised alerts for HACCP compliance.
+    Each alert is a dict with: type, severity, title, detail, link."""
+    alerts = {'critical': [], 'warning': [], 'info': []}
+    conn = get_db()
+    cur = conn.cursor()
+
+    # 1. Temperature checks overdue per equipment
+    cur.execute('''
+        SELECT e.id, e.name, e.equipment_type, e.check_frequency_hours,
+               MAX(tl.logged_at) as last_log
+        FROM haccp_equipment e
+        LEFT JOIN haccp_temperature_logs tl
+            ON tl.equipment_id = e.id AND tl.is_voided = false
+        WHERE e.organization_id = %s AND e.is_active = true
+        GROUP BY e.id, e.name, e.equipment_type, e.check_frequency_hours
+    ''', (org_id,))
+    equipment_status = cur.fetchall()
+
+    now = datetime.now()
+    for eq in equipment_status:
+        freq_hours = eq['check_frequency_hours'] or 24
+        if eq['last_log'] is None:
+            alerts['warning'].append({
+                'type': 'temp_never_logged',
+                'severity': 'warning',
+                'title': f"No temperature ever logged for {eq['name']}",
+                'detail': f"{eq['equipment_type']} \u2014 add a first reading to start the audit trail",
+                'link': '/haccp/temperatures',
+            })
+            continue
+        last_log = eq['last_log']
+        if last_log.tzinfo is not None:
+            last_log = last_log.replace(tzinfo=None)
+        hours_since = (now - last_log).total_seconds() / 3600
+        if hours_since > freq_hours * 2:
+            alerts['critical'].append({
+                'type': 'temp_severely_overdue',
+                'severity': 'critical',
+                'title': f"{eq['name']} \u2014 temperature check severely overdue",
+                'detail': f"Last logged {int(hours_since)}h ago (expected every {freq_hours}h)",
+                'link': '/haccp/temperatures',
+            })
+        elif hours_since > freq_hours:
+            alerts['warning'].append({
+                'type': 'temp_overdue',
+                'severity': 'warning',
+                'title': f"{eq['name']} \u2014 temperature check overdue",
+                'detail': f"Last logged {int(hours_since)}h ago (expected every {freq_hours}h)",
+                'link': '/haccp/temperatures',
+            })
+
+    # 2. Recent temperature failures without corrective action
+    cur.execute('''
+        SELECT tl.id, tl.temperature, tl.logged_at, tl.corrective_action,
+               e.name as equipment_name
+        FROM haccp_temperature_logs tl
+        JOIN haccp_equipment e ON e.id = tl.equipment_id
+        WHERE tl.organization_id = %s
+          AND tl.status = 'fail'
+          AND tl.is_voided = false
+          AND (tl.corrective_action IS NULL OR tl.corrective_action = '')
+          AND tl.logged_at >= NOW() - INTERVAL '7 days'
+        ORDER BY tl.logged_at DESC
+    ''', (org_id,))
+    for fail in cur.fetchall():
+        alerts['critical'].append({
+            'type': 'temp_fail_no_action',
+            'severity': 'critical',
+            'title': f"Failed temperature with no corrective action recorded",
+            'detail': f"{fail['equipment_name']}: {fail['temperature']}\u00b0C on {fail['logged_at'].strftime('%d %b %H:%M')}",
+            'link': '/haccp/temperatures',
+        })
+
+    # 3. Cleaning tasks overdue based on frequency
+    cur.execute('''
+        SELECT ct.id, ct.task_name, ct.frequency,
+               MAX(cl.completed_at) as last_done
+        FROM haccp_cleaning_tasks ct
+        LEFT JOIN haccp_cleaning_logs cl
+            ON cl.task_id = ct.id AND cl.is_voided = false
+        WHERE ct.organization_id = %s AND ct.is_active = true
+        GROUP BY ct.id, ct.task_name, ct.frequency
+    ''', (org_id,))
+    freq_to_hours = {
+        'Daily': 24, 'Weekly': 168, 'Monthly': 720,
+        'Quarterly': 2160, 'Annually': 8760, 'After use': None,
+    }
+    for task in cur.fetchall():
+        max_hours = freq_to_hours.get(task['frequency'])
+        if max_hours is None:
+            continue  # 'After use' tasks don't have a recurring deadline
+        if task['last_done'] is None:
+            alerts['warning'].append({
+                'type': 'cleaning_never_done',
+                'severity': 'warning',
+                'title': f"Cleaning task never recorded: {task['task_name']}",
+                'detail': f"Expected frequency: {task['frequency']}",
+                'link': '/haccp/cleaning',
+            })
+            continue
+        last_done = task['last_done']
+        if last_done.tzinfo is not None:
+            last_done = last_done.replace(tzinfo=None)
+        hours_since = (now - last_done).total_seconds() / 3600
+        if hours_since > max_hours * 1.5:
+            alerts['critical'].append({
+                'type': 'cleaning_severely_overdue',
+                'severity': 'critical',
+                'title': f"{task['task_name']} \u2014 severely overdue",
+                'detail': f"Last done {int(hours_since/24)} days ago ({task['frequency']})",
+                'link': '/haccp/cleaning',
+            })
+        elif hours_since > max_hours:
+            alerts['warning'].append({
+                'type': 'cleaning_overdue',
+                'severity': 'warning',
+                'title': f"{task['task_name']} \u2014 overdue",
+                'detail': f"Last done {int(hours_since/24)} days ago ({task['frequency']})",
+                'link': '/haccp/cleaning',
+            })
+
+    # 4. Business settings incomplete (info-level reminder)
+    cur.execute('SELECT business_name, food_business_registration FROM organizations WHERE id = %s', (org_id,))
+    org = cur.fetchone()
+    if org and (not org.get('business_name') or not org.get('food_business_registration')):
+        alerts['info'].append({
+            'type': 'settings_incomplete',
+            'severity': 'info',
+            'title': 'Business details incomplete',
+            'detail': 'Add your trading name and FBO registration so PDFs are audit-ready',
+            'link': '/settings/business',
+        })
+
+    cur.close()
+    conn.close()
+    return alerts
+
+
+def cleaning_task_due_status(last_done, frequency):
+    """Return (status, label) for a cleaning task. status in {'overdue','due_soon','ok','never','no_recurrence'}."""
+    freq_to_hours = {
+        'Daily': 24, 'Weekly': 168, 'Monthly': 720,
+        'Quarterly': 2160, 'Annually': 8760, 'After use': None,
+    }
+    max_hours = freq_to_hours.get(frequency)
+    if max_hours is None:
+        return ('no_recurrence', 'as needed')
+    if last_done is None:
+        return ('never', 'never done')
+    last = last_done.replace(tzinfo=None) if last_done.tzinfo else last_done
+    hours_since = (datetime.now() - last).total_seconds() / 3600
+    hours_remaining = max_hours - hours_since
+    if hours_remaining < 0:
+        days_over = abs(int(hours_remaining / 24))
+        return ('overdue', f"overdue by {days_over}d" if days_over else "overdue")
+    if hours_remaining < max_hours * 0.25:
+        hrs = int(hours_remaining)
+        return ('due_soon', f"due in {hrs}h" if hrs < 48 else f"due in {int(hrs/24)}d")
+    return ('ok', f"next due in {int(hours_remaining/24)}d" if hours_remaining > 48 else f"next due in {int(hours_remaining)}h")
 
 @app.route('/haccp')
 @login_required
@@ -769,22 +935,54 @@ def haccp_temperatures():
         cur.execute('SELECT * FROM haccp_equipment WHERE organization_id = %s AND is_active = true ORDER BY name', (org_id,))
         equipment = cur.fetchall()
 
+@app.route('/haccp')
+@login_required
+def haccp_dashboard():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+
+        cur.execute('SELECT COUNT(*) as count FROM haccp_equipment WHERE organization_id = %s AND is_active = true', (org_id,))
+        equipment_count = cur.fetchone()['count']
+
+        cur.execute("SELECT COUNT(*) as count FROM haccp_temperature_logs WHERE organization_id = %s AND logged_at >= NOW() - INTERVAL '24 hours'", (org_id,))
+        temps_today = cur.fetchone()['count']
+
+        cur.execute("SELECT COUNT(*) as count FROM haccp_temperature_logs WHERE organization_id = %s AND status = 'fail' AND logged_at >= NOW() - INTERVAL '7 days'", (org_id,))
+        temp_failures = cur.fetchone()['count']
+
+        cur.execute('SELECT COUNT(*) as count FROM haccp_cleaning_tasks WHERE organization_id = %s AND is_active = true', (org_id,))
+        cleaning_tasks = cur.fetchone()['count']
+
+        cur.execute("SELECT COUNT(*) as count FROM haccp_delivery_logs WHERE organization_id = %s AND created_at >= NOW() - INTERVAL '7 days'", (org_id,))
+        deliveries_week = cur.fetchone()['count']
+
         cur.execute('''
             SELECT tl.*, e.name as equipment_name, e.equipment_type, e.min_temp, e.max_temp
             FROM haccp_temperature_logs tl
             JOIN haccp_equipment e ON tl.equipment_id = e.id
             WHERE tl.organization_id = %s
             ORDER BY tl.logged_at DESC
-            LIMIT 50
+            LIMIT 10
         ''', (org_id,))
-        logs = cur.fetchall()
+        recent_temps = cur.fetchall()
 
         cur.close()
         conn.close()
 
-        return render_template('haccp_temperatures.html', equipment=equipment, logs=logs)
+        alerts = get_compliance_alerts(org_id)
+
+        return render_template('haccp_dashboard.html',
+                             equipment_count=equipment_count,
+                             temps_today=temps_today,
+                             temp_failures=temp_failures,
+                             cleaning_tasks=cleaning_tasks,
+                             deliveries_week=deliveries_week,
+                             recent_temps=recent_temps,
+                             alerts=alerts)
     except Exception as e:
-        print(f"Temperature error: {e}")
+        print(f"HACCP dashboard error: {e}")
         traceback.print_exc()
         return f"Error: {str(e)}", 500
 
@@ -873,8 +1071,22 @@ def haccp_cleaning():
         conn = get_db()
         cur = conn.cursor()
 
-        cur.execute('SELECT * FROM haccp_cleaning_tasks WHERE organization_id = %s AND is_active = true ORDER BY task_name', (org_id,))
+        cur.execute('''
+            SELECT ct.*, MAX(cl.completed_at) as last_done
+            FROM haccp_cleaning_tasks ct
+            LEFT JOIN haccp_cleaning_logs cl
+                ON cl.task_id = ct.id AND cl.is_voided = false
+            WHERE ct.organization_id = %s AND ct.is_active = true
+            GROUP BY ct.id
+            ORDER BY ct.task_name
+        ''', (org_id,))
         tasks = cur.fetchall()
+
+        # Add due status to each task
+        for task in tasks:
+            status, label = cleaning_task_due_status(task['last_done'], task['frequency'])
+            task['due_status'] = status
+            task['due_label'] = label
 
         cur.execute('''
             SELECT cl.*, ct.task_name, ct.area, ct.frequency
@@ -894,36 +1106,6 @@ def haccp_cleaning():
         print(f"Cleaning error: {e}")
         traceback.print_exc()
         return f"Error: {str(e)}", 500
-
-
-@app.route('/haccp/cleaning/add-task', methods=['POST'])
-@login_required
-def add_cleaning_task():
-    try:
-        org_id = get_current_org_id()
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute('''
-            INSERT INTO haccp_cleaning_tasks (organization_id, task_name, area, frequency, chemicals_used, instructions)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        ''', (
-            org_id,
-            request.form['task_name'],
-            request.form.get('area', ''),
-            request.form['frequency'],
-            request.form.get('chemicals_used', ''),
-            request.form.get('instructions', '')
-        ))
-        conn.commit()
-        cur.close()
-        conn.close()
-        flash('Cleaning task added!', 'success')
-        return redirect('/haccp/cleaning')
-    except Exception as e:
-        print(f"Add cleaning task error: {e}")
-        flash('Error adding task', 'danger')
-        return redirect('/haccp/cleaning')
-
 
 @app.route('/haccp/cleaning/log', methods=['POST'])
 @login_required
@@ -1022,7 +1204,7 @@ def edit_equipment(id):
             request.form['name'],
             request.form['equipment_type'],
             request.form.get('location', ''),
-            float(request.form['min_temp']) if request.form.get('min_temp') else None,
+            f5loat(request.form['min_temp']) if request.form.get('min_temp') else None,
             float(request.form['max_temp']) if request.form.get('max_temp') else None,
             id,
             org_id
