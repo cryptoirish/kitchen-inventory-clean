@@ -3,19 +3,12 @@ import psycopg
 from psycopg.rows import dict_row
 import os
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import csv
 from io import StringIO
 import stripe
-from io import BytesIO
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.enums import TA_CENTER
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -423,15 +416,9 @@ def alerts():
         low_stock = cur.fetchall()
         cur.close()
         conn.close()
-
-        haccp_alerts = get_compliance_alerts(org_id)
-
-        return render_template('alerts.html',
-                             items=low_stock,
-                             haccp_alerts=haccp_alerts)
+        return render_template('alerts.html', items=low_stock)
     except Exception as e:
         print(f"Alerts error: {e}")
-        traceback.print_exc()
         return f"Error loading alerts: {str(e)}", 500
 
 @app.route('/recipes')
@@ -713,10 +700,9 @@ def billing_portal():
         return redirect('/billing')
 # ========== HACCP ROUTES ==========
 
-# HACCP ROUTES
+
 def get_compliance_alerts(org_id):
-    """Returns a dict of categorised alerts for HACCP compliance.
-    Each alert is a dict with: type, severity, title, detail, link."""
+    """Returns a dict of categorised alerts for HACCP compliance."""
     alerts = {'critical': [], 'warning': [], 'info': []}
     conn = get_db()
     cur = conn.cursor()
@@ -783,7 +769,7 @@ def get_compliance_alerts(org_id):
         alerts['critical'].append({
             'type': 'temp_fail_no_action',
             'severity': 'critical',
-            'title': f"Failed temperature with no corrective action recorded",
+            'title': "Failed temperature with no corrective action recorded",
             'detail': f"{fail['equipment_name']}: {fail['temperature']}\u00b0C on {fail['logged_at'].strftime('%d %b %H:%M')}",
             'link': '/haccp/temperatures',
         })
@@ -805,7 +791,7 @@ def get_compliance_alerts(org_id):
     for task in cur.fetchall():
         max_hours = freq_to_hours.get(task['frequency'])
         if max_hours is None:
-            continue  # 'After use' tasks don't have a recurring deadline
+            continue
         if task['last_done'] is None:
             alerts['warning'].append({
                 'type': 'cleaning_never_done',
@@ -854,7 +840,7 @@ def get_compliance_alerts(org_id):
 
 
 def cleaning_task_due_status(last_done, frequency):
-    """Return (status, label) for a cleaning task. status in {'overdue','due_soon','ok','never','no_recurrence'}."""
+    """Return (status, label) for a cleaning task."""
     freq_to_hours = {
         'Daily': 24, 'Weekly': 168, 'Monthly': 720,
         'Quarterly': 2160, 'Annually': 8760, 'After use': None,
@@ -875,65 +861,6 @@ def cleaning_task_due_status(last_done, frequency):
         return ('due_soon', f"due in {hrs}h" if hrs < 48 else f"due in {int(hrs/24)}d")
     return ('ok', f"next due in {int(hours_remaining/24)}d" if hours_remaining > 48 else f"next due in {int(hours_remaining)}h")
 
-@app.route('/haccp')
-@login_required
-def haccp_dashboard():
-    try:
-        org_id = get_current_org_id()
-        conn = get_db()
-        cur = conn.cursor()
-
-        cur.execute('SELECT COUNT(*) as count FROM haccp_equipment WHERE organization_id = %s AND is_active = true', (org_id,))
-        equipment_count = cur.fetchone()['count']
-
-        cur.execute("SELECT COUNT(*) as count FROM haccp_temperature_logs WHERE organization_id = %s AND logged_at >= NOW() - INTERVAL '24 hours'", (org_id,))
-        temps_today = cur.fetchone()['count']
-
-        cur.execute("SELECT COUNT(*) as count FROM haccp_temperature_logs WHERE organization_id = %s AND status = 'fail' AND logged_at >= NOW() - INTERVAL '7 days'", (org_id,))
-        temp_failures = cur.fetchone()['count']
-
-        cur.execute('SELECT COUNT(*) as count FROM haccp_cleaning_tasks WHERE organization_id = %s AND is_active = true', (org_id,))
-        cleaning_tasks = cur.fetchone()['count']
-
-        cur.execute("SELECT COUNT(*) as count FROM haccp_delivery_logs WHERE organization_id = %s AND created_at >= NOW() - INTERVAL '7 days'", (org_id,))
-        deliveries_week = cur.fetchone()['count']
-
-        cur.execute('''
-            SELECT tl.*, e.name as equipment_name, e.equipment_type, e.min_temp, e.max_temp
-            FROM haccp_temperature_logs tl
-            JOIN haccp_equipment e ON tl.equipment_id = e.id
-            WHERE tl.organization_id = %s
-            ORDER BY tl.logged_at DESC
-            LIMIT 10
-        ''', (org_id,))
-        recent_temps = cur.fetchall()
-
-        cur.close()
-        conn.close()
-
-        return render_template('haccp_dashboard.html',
-                             equipment_count=equipment_count,
-                             temps_today=temps_today,
-                             temp_failures=temp_failures,
-                             cleaning_tasks=cleaning_tasks,
-                             deliveries_week=deliveries_week,
-                             recent_temps=recent_temps)
-    except Exception as e:
-        print(f"HACCP dashboard error: {e}")
-        traceback.print_exc()
-        return f"Error: {str(e)}", 500
-
-
-@app.route('/haccp/temperatures')
-@login_required
-def haccp_temperatures():
-    try:
-        org_id = get_current_org_id()
-        conn = get_db()
-        cur = conn.cursor()
-
-        cur.execute('SELECT * FROM haccp_equipment WHERE organization_id = %s AND is_active = true ORDER BY name', (org_id,))
-        equipment = cur.fetchall()
 
 @app.route('/haccp')
 @login_required
@@ -987,6 +914,37 @@ def haccp_dashboard():
         return f"Error: {str(e)}", 500
 
 
+@app.route('/haccp/temperatures')
+@login_required
+def haccp_temperatures():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+
+        cur.execute('SELECT * FROM haccp_equipment WHERE organization_id = %s AND is_active = true ORDER BY name', (org_id,))
+        equipment = cur.fetchall()
+
+        cur.execute('''
+            SELECT tl.*, e.name as equipment_name, e.equipment_type, e.min_temp, e.max_temp
+            FROM haccp_temperature_logs tl
+            JOIN haccp_equipment e ON tl.equipment_id = e.id
+            WHERE tl.organization_id = %s
+            ORDER BY tl.logged_at DESC
+            LIMIT 50
+        ''', (org_id,))
+        logs = cur.fetchall()
+
+        cur.close()
+        conn.close()
+
+        return render_template('haccp_temperatures.html', equipment=equipment, logs=logs)
+    except Exception as e:
+        print(f"Temperature error: {e}")
+        traceback.print_exc()
+        return f"Error: {str(e)}", 500
+
+
 @app.route('/haccp/equipment/add', methods=['POST'])
 @login_required
 def add_equipment():
@@ -1013,6 +971,56 @@ def add_equipment():
     except Exception as e:
         print(f"Add equipment error: {e}")
         flash('Error adding equipment', 'danger')
+        return redirect('/haccp/temperatures')
+
+
+@app.route('/haccp/equipment/edit/<int:id>', methods=['POST'])
+@login_required
+def edit_equipment(id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE haccp_equipment
+            SET name = %s, equipment_type = %s, location = %s, min_temp = %s, max_temp = %s
+            WHERE id = %s AND organization_id = %s
+        ''', (
+            request.form['name'],
+            request.form['equipment_type'],
+            request.form.get('location', ''),
+            float(request.form['min_temp']) if request.form.get('min_temp') else None,
+            float(request.form['max_temp']) if request.form.get('max_temp') else None,
+            id,
+            org_id
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Equipment updated!', 'success')
+        return redirect('/haccp/temperatures')
+    except Exception as e:
+        print(f"Edit equipment error: {e}")
+        flash('Error updating equipment', 'danger')
+        return redirect('/haccp/temperatures')
+
+
+@app.route('/haccp/equipment/delete/<int:id>', methods=['POST'])
+@login_required
+def soft_delete_equipment(id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('UPDATE haccp_equipment SET is_active = false WHERE id = %s AND organization_id = %s', (id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Equipment removed from active list. Historical logs preserved.', 'success')
+        return redirect('/haccp/temperatures')
+    except Exception as e:
+        print(f"Delete equipment error: {e}")
+        flash('Error removing equipment', 'danger')
         return redirect('/haccp/temperatures')
 
 
@@ -1052,9 +1060,9 @@ def log_temperature():
         conn.close()
 
         if status == 'fail':
-            flash(f'⚠️ Temperature {temp}°C is OUT OF RANGE! Log corrective action.', 'danger')
+            flash(f'\u26a0\ufe0f Temperature {temp}\u00b0C is OUT OF RANGE! Log corrective action.', 'danger')
         else:
-            flash(f'✅ Temperature {temp}°C logged successfully', 'success')
+            flash(f'\u2705 Temperature {temp}\u00b0C logged successfully', 'success')
 
         return redirect('/haccp/temperatures')
     except Exception as e:
@@ -1062,187 +1070,6 @@ def log_temperature():
         flash('Error logging temperature', 'danger')
         return redirect('/haccp/temperatures')
 
-
-@app.route('/haccp/cleaning')
-@login_required
-def haccp_cleaning():
-    try:
-        org_id = get_current_org_id()
-        conn = get_db()
-        cur = conn.cursor()
-
-        cur.execute('''
-            SELECT ct.*, MAX(cl.completed_at) as last_done
-            FROM haccp_cleaning_tasks ct
-            LEFT JOIN haccp_cleaning_logs cl
-                ON cl.task_id = ct.id AND cl.is_voided = false
-            WHERE ct.organization_id = %s AND ct.is_active = true
-            GROUP BY ct.id
-            ORDER BY ct.task_name
-        ''', (org_id,))
-        tasks = cur.fetchall()
-
-        # Add due status to each task
-        for task in tasks:
-            status, label = cleaning_task_due_status(task['last_done'], task['frequency'])
-            task['due_status'] = status
-            task['due_label'] = label
-
-        cur.execute('''
-            SELECT cl.*, ct.task_name, ct.area, ct.frequency
-            FROM haccp_cleaning_logs cl
-            JOIN haccp_cleaning_tasks ct ON cl.task_id = ct.id
-            WHERE cl.organization_id = %s
-            ORDER BY cl.completed_at DESC
-            LIMIT 30
-        ''', (org_id,))
-        logs = cur.fetchall()
-
-        cur.close()
-        conn.close()
-
-        return render_template('haccp_cleaning.html', tasks=tasks, logs=logs)
-    except Exception as e:
-        print(f"Cleaning error: {e}")
-        traceback.print_exc()
-        return f"Error: {str(e)}", 500
-
-@app.route('/haccp/cleaning/log', methods=['POST'])
-@login_required
-def log_cleaning():
-    try:
-        org_id = get_current_org_id()
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute('''
-            INSERT INTO haccp_cleaning_logs (organization_id, task_id, completed, notes, completed_by)
-            VALUES (%s, %s, %s, %s, %s)
-        ''', (
-            org_id,
-            request.form['task_id'],
-            True,
-            request.form.get('notes', ''),
-            session.get('user_name', 'Unknown')
-        ))
-        conn.commit()
-        cur.close()
-        conn.close()
-        flash('Cleaning logged!', 'success')
-        return redirect('/haccp/cleaning')
-    except Exception as e:
-        print(f"Log cleaning error: {e}")
-        flash('Error logging cleaning', 'danger')
-        return redirect('/haccp/cleaning')
-
-
-@app.route('/haccp/deliveries')
-@login_required
-def haccp_deliveries():
-    try:
-        org_id = get_current_org_id()
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute('SELECT * FROM haccp_delivery_logs WHERE organization_id = %s ORDER BY delivery_date DESC LIMIT 50', (org_id,))
-        deliveries = cur.fetchall()
-        cur.close()
-        conn.close()
-        return render_template('haccp_deliveries.html', deliveries=deliveries)
-    except Exception as e:
-        print(f"Deliveries error: {e}")
-        traceback.print_exc()
-        return f"Error: {str(e)}", 500
-
-
-@app.route('/haccp/deliveries/add', methods=['POST'])
-@login_required
-def add_delivery():
-    try:
-        org_id = get_current_org_id()
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute('''
-            INSERT INTO haccp_delivery_logs (organization_id, supplier_name, delivery_date, temperature_check, packaging_ok, expiry_dates_ok, quality_ok, accepted, notes, inspected_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (
-            org_id,
-            request.form['supplier_name'],
-            request.form['delivery_date'],
-            float(request.form['temperature_check']) if request.form.get('temperature_check') else None,
-            request.form.get('packaging_ok') == 'on',
-            request.form.get('expiry_dates_ok') == 'on',
-            request.form.get('quality_ok') == 'on',
-            request.form.get('accepted') == 'on',
-            request.form.get('notes', ''),
-            session.get('user_name', 'Unknown')
-        ))
-        conn.commit()
-        cur.close()
-        conn.close()
-        flash('Delivery logged!', 'success')
-        return redirect('/haccp/deliveries')
-    except Exception as e:
-        print(f"Add delivery error: {e}")
-        flash('Error logging delivery', 'danger')
-        return redirect('/haccp/deliveries')
-
-# HACCP EDIT / DELETE / VOID ROUTES
-
-# --- Equipment: edit and soft-delete ---
-
-@app.route('/haccp/equipment/edit/<int:id>', methods=['POST'])
-@login_required
-def edit_equipment(id):
-    try:
-        org_id = get_current_org_id()
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute('''
-            UPDATE haccp_equipment
-            SET name = %s, equipment_type = %s, location = %s, min_temp = %s, max_temp = %s
-            WHERE id = %s AND organization_id = %s
-        ''', (
-            request.form['name'],
-            request.form['equipment_type'],
-            request.form.get('location', ''),
-            f5loat(request.form['min_temp']) if request.form.get('min_temp') else None,
-            float(request.form['max_temp']) if request.form.get('max_temp') else None,
-            id,
-            org_id
-        ))
-        conn.commit()
-        cur.close()
-        conn.close()
-        flash('Equipment updated!', 'success')
-        return redirect('/haccp/temperatures')
-    except Exception as e:
-        print(f"Edit equipment error: {e}")
-        flash('Error updating equipment', 'danger')
-        return redirect('/haccp/temperatures')
-
-
-@app.route('/haccp/equipment/delete/<int:id>', methods=['POST'])
-@login_required
-def soft_delete_equipment(id):
-    try:
-        org_id = get_current_org_id()
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute('''
-            UPDATE haccp_equipment SET is_active = false
-            WHERE id = %s AND organization_id = %s
-        ''', (id, org_id))
-        conn.commit()
-        cur.close()
-        conn.close()
-        flash('Equipment removed from active list. Historical logs preserved.', 'success')
-        return redirect('/haccp/temperatures')
-    except Exception as e:
-        print(f"Delete equipment error: {e}")
-        flash('Error removing equipment', 'danger')
-        return redirect('/haccp/temperatures')
-
-
-# --- Temperature logs: void with reason ---
 
 @app.route('/haccp/temperature/void/<int:id>', methods=['POST'])
 @login_required
@@ -1271,7 +1098,78 @@ def void_temperature_log(id):
         return redirect('/haccp/temperatures')
 
 
-# --- Cleaning tasks: edit and soft-delete ---
+@app.route('/haccp/cleaning')
+@login_required
+def haccp_cleaning():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+
+        cur.execute('''
+            SELECT ct.*, MAX(cl.completed_at) as last_done
+            FROM haccp_cleaning_tasks ct
+            LEFT JOIN haccp_cleaning_logs cl
+                ON cl.task_id = ct.id AND cl.is_voided = false
+            WHERE ct.organization_id = %s AND ct.is_active = true
+            GROUP BY ct.id
+            ORDER BY ct.task_name
+        ''', (org_id,))
+        tasks = cur.fetchall()
+
+        for task in tasks:
+            status, label = cleaning_task_due_status(task['last_done'], task['frequency'])
+            task['due_status'] = status
+            task['due_label'] = label
+
+        cur.execute('''
+            SELECT cl.*, ct.task_name, ct.area, ct.frequency
+            FROM haccp_cleaning_logs cl
+            JOIN haccp_cleaning_tasks ct ON cl.task_id = ct.id
+            WHERE cl.organization_id = %s
+            ORDER BY cl.completed_at DESC
+            LIMIT 30
+        ''', (org_id,))
+        logs = cur.fetchall()
+
+        cur.close()
+        conn.close()
+
+        return render_template('haccp_cleaning.html', tasks=tasks, logs=logs)
+    except Exception as e:
+        print(f"Cleaning error: {e}")
+        traceback.print_exc()
+        return f"Error: {str(e)}", 500
+
+
+@app.route('/haccp/cleaning/add-task', methods=['POST'])
+@login_required
+def add_cleaning_task():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO haccp_cleaning_tasks (organization_id, task_name, area, frequency, chemicals_used, instructions)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (
+            org_id,
+            request.form['task_name'],
+            request.form.get('area', ''),
+            request.form['frequency'],
+            request.form.get('chemicals_used', ''),
+            request.form.get('instructions', '')
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Cleaning task added!', 'success')
+        return redirect('/haccp/cleaning')
+    except Exception as e:
+        print(f"Add cleaning task error: {e}")
+        flash('Error adding task', 'danger')
+        return redirect('/haccp/cleaning')
+
 
 @app.route('/haccp/cleaning/edit-task/<int:id>', methods=['POST'])
 @login_required
@@ -1311,10 +1209,7 @@ def soft_delete_cleaning_task(id):
         org_id = get_current_org_id()
         conn = get_db()
         cur = conn.cursor()
-        cur.execute('''
-            UPDATE haccp_cleaning_tasks SET is_active = false
-            WHERE id = %s AND organization_id = %s
-        ''', (id, org_id))
+        cur.execute('UPDATE haccp_cleaning_tasks SET is_active = false WHERE id = %s AND organization_id = %s', (id, org_id))
         conn.commit()
         cur.close()
         conn.close()
@@ -1326,7 +1221,33 @@ def soft_delete_cleaning_task(id):
         return redirect('/haccp/cleaning')
 
 
-# --- Cleaning logs: void with reason ---
+@app.route('/haccp/cleaning/log', methods=['POST'])
+@login_required
+def log_cleaning():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO haccp_cleaning_logs (organization_id, task_id, completed, notes, completed_by)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (
+            org_id,
+            request.form['task_id'],
+            True,
+            request.form.get('notes', ''),
+            session.get('user_name', 'Unknown')
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Cleaning logged!', 'success')
+        return redirect('/haccp/cleaning')
+    except Exception as e:
+        print(f"Log cleaning error: {e}")
+        flash('Error logging cleaning', 'danger')
+        return redirect('/haccp/cleaning')
+
 
 @app.route('/haccp/cleaning/void/<int:id>', methods=['POST'])
 @login_required
@@ -1355,7 +1276,57 @@ def void_cleaning_log(id):
         return redirect('/haccp/cleaning')
 
 
-# --- Deliveries: edit and hard-delete ---
+@app.route('/haccp/deliveries')
+@login_required
+def haccp_deliveries():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM haccp_delivery_logs WHERE organization_id = %s ORDER BY delivery_date DESC LIMIT 50', (org_id,))
+        deliveries = cur.fetchall()
+        cur.close()
+        conn.close()
+        return render_template('haccp_deliveries.html', deliveries=deliveries)
+    except Exception as e:
+        print(f"Deliveries error: {e}")
+        traceback.print_exc()
+        return f"Error: {str(e)}", 500
+
+
+@app.route('/haccp/deliveries/add', methods=['POST'])
+@login_required
+def add_delivery():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO haccp_delivery_logs (organization_id, supplier_name, delivery_date, chilled_temp, frozen_temp, packaging_ok, expiry_dates_ok, quality_ok, accepted, notes, inspected_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (
+            org_id,
+            request.form['supplier_name'],
+            request.form['delivery_date'],
+            float(request.form['chilled_temp']) if request.form.get('chilled_temp') else None,
+            float(request.form['frozen_temp']) if request.form.get('frozen_temp') else None,
+            request.form.get('packaging_ok') == 'on',
+            request.form.get('expiry_dates_ok') == 'on',
+            request.form.get('quality_ok') == 'on',
+            request.form.get('accepted') == 'on',
+            request.form.get('notes', ''),
+            session.get('user_name', 'Unknown')
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Delivery logged!', 'success')
+        return redirect('/haccp/deliveries')
+    except Exception as e:
+        print(f"Add delivery error: {e}")
+        flash('Error logging delivery', 'danger')
+        return redirect('/haccp/deliveries')
+
 
 @app.route('/haccp/deliveries/edit/<int:id>', methods=['POST'])
 @login_required
@@ -1492,7 +1463,6 @@ def haccp_reports():
 
 
 def _parse_date_range():
-    """Parse from/to dates from request.args, default to last 30 days."""
     today = datetime.now().date()
     try:
         date_to = datetime.strptime(request.args.get('to', today.strftime('%Y-%m-%d')), '%Y-%m-%d').date()
@@ -1522,7 +1492,6 @@ def _pdf_styles():
 
 
 def _build_header(org, styles):
-    """Return a list of flowables for the business header."""
     flow = []
     business_name = (org.get('business_name') if org else None) or (org.get('name') if org else None) or 'Food Business'
     flow.append(Paragraph(business_name, styles['HeaderTitle']))
@@ -1565,7 +1534,6 @@ def _table_style(header_bg='#2c5282'):
 
 
 def _generate_pdf(title, org, date_from, date_to, content_builders):
-    """content_builders = list of functions taking (styles) -> list of flowables."""
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
                           leftMargin=1.5*cm, rightMargin=1.5*cm,
