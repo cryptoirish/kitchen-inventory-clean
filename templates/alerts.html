@@ -1,189 +1,87 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Alerts - YieldGuard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a202c; color: #e2e8f0; min-height: 100vh; }
-        
-        .navbar { background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%); padding: 15px 0; border-bottom: 1px solid #27ae60; position: sticky; top: 0; z-index: 1000; }
-        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 15px; display: flex; justify-content: space-between; align-items: center; }
-        .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-        .logo-icon { width: 40px; height: 40px; background: linear-gradient(135deg, #27ae60 0%, #229954 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-        .logo-text { color: #27ae60; font-size: 20px; font-weight: bold; }
-        .nav-links { display: flex; gap: 10px; align-items: center; }
-        .nav-links a { color: #e2e8f0; text-decoration: none; font-weight: 500; padding: 8px 14px; border-radius: 8px; transition: all 0.3s; font-size: 14px; }
-        .nav-links a:hover { background: rgba(39, 174, 96, 0.1); color: #27ae60; }
-        
-        .hamburger { display: none; flex-direction: column; gap: 4px; cursor: pointer; padding: 10px; border: none; background: none; }
-        .hamburger span { width: 25px; height: 3px; background: #27ae60; border-radius: 2px; }
-        
-        .mobile-menu { display: none; position: fixed; top: 70px; left: 0; right: 0; background: #1a202c; padding: 20px; border-bottom: 2px solid #27ae60; flex-direction: column; gap: 10px; z-index: 999; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .mobile-menu.active { display: flex; }
-        .mobile-menu a { color: #e2e8f0; text-decoration: none; font-weight: 500; padding: 15px 20px; border-radius: 10px; font-size: 16px; border: 1px solid #374151; }
-        .mobile-menu a:hover, .mobile-menu a.active { background: rgba(39, 174, 96, 0.1); color: #27ae60; border-color: #27ae60; }
-        
-        .container { max-width: 1400px; margin: 0 auto; padding: 20px 15px; }
-        
-        .alert-header { background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%); padding: 30px 20px; border-radius: 12px; margin-bottom: 20px; text-align: center; box-shadow: 0 10px 30px rgba(231, 76, 60, 0.3); }
-        .alert-header h1 { color: white; font-size: 28px; margin-bottom: 8px; }
-        .alert-header p { color: rgba(255, 255, 255, 0.9); font-size: 14px; }
-        
-        .quick-actions { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-        
-        .btn { display: inline-block; padding: 10px 18px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; transition: all 0.3s; border: none; text-align: center; }
-        .btn-primary { background: linear-gradient(135deg, #27ae60 0%, #229954 100%); color: white; }
-        .btn-primary:hover { transform: translateY(-2px); }
-        .btn-secondary { background: #374151; color: #e2e8f0; border: 1px solid #4a5568; }
-        
-        .table-container { background: #2d3748; border-radius: 12px; overflow: hidden; border: 1px solid #4a5568; }
-        .table-wrapper { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; min-width: 700px; }
-        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #4a5568; }
-        th { background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%); color: white; font-weight: 600; text-transform: uppercase; font-size: 12px; }
-        tbody tr { background: rgba(231, 76, 60, 0.05); }
-        tbody tr:hover { background: rgba(231, 76, 60, 0.1); }
-        .item-name { font-weight: 600; color: #e74c3c; }
-        .shortage { color: #e74c3c; font-weight: bold; }
-        
-        .success-state { background: linear-gradient(135deg, #2d3748 0%, #374151 100%); padding: 60px 30px; text-align: center; border-radius: 12px; border: 2px solid #27ae60; }
-        .success-icon { font-size: 64px; margin-bottom: 15px; }
-        .success-state h2 { color: #27ae60; font-size: 24px; margin-bottom: 10px; }
-        .success-state p { color: #a0aec0; font-size: 15px; margin-bottom: 25px; }
-        
-        /* Mobile Cards */
-        .mobile-cards { display: none; }
-        .alert-card { background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; border-radius: 12px; padding: 15px; margin-bottom: 12px; }
-        .alert-card-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px; }
-        .alert-card-title { font-size: 16px; font-weight: bold; color: #e74c3c; }
-        .alert-card-category { font-size: 12px; color: #a0aec0; margin-top: 2px; }
-        .alert-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-        .alert-card-stat { background: #1a202c; padding: 10px; border-radius: 6px; }
-        .alert-card-stat-label { font-size: 11px; color: #a0aec0; text-transform: uppercase; margin-bottom: 3px; }
-        .alert-card-stat-value { font-size: 15px; color: #e74c3c; font-weight: bold; }
-        .alert-card-stat-value.neutral { color: #e2e8f0; }
-        
-        @media (max-width: 768px) {
-            .nav-links { display: none; }
-            .hamburger { display: flex; }
-            .logo-text { font-size: 18px; }
-            .container { padding: 15px 10px; }
-            .alert-header h1 { font-size: 22px; }
-            .quick-actions { flex-direction: column; }
-            .quick-actions a { width: 100%; }
-            .table-container { display: none; }
-            .mobile-cards { display: block; }
-        }
-    </style>
-</head>
-<body>
-    <nav class="navbar">
-        <div class="nav-container">
-            <a href="/" class="logo">
-                <div class="logo-icon">🍳</div>
-                <div class="logo-text">YieldGuard</div>
-            </a>
-            <div class="nav-links">
-                <a href="/">Dashboard</a>
-                <a href="/inventory">Inventory</a>
-                <a href="/recipes">Recipes</a>
-                <a href="/alerts" style="color: #27ae60;">Alerts</a>
-                <a href="/billing">Billing</a>
-                <a href="/logout">Logout</a>
-            </div>
-            <button class="hamburger" onclick="toggleMenu()">
-                <span></span><span></span><span></span>
-            </button>
-        </div>
         <div class="mobile-menu" id="mobileMenu">
             <a href="/">📊 Dashboard</a>
             <a href="/inventory">📦 Inventory</a>
             <a href="/recipes">🍽️ Recipes</a>
-            <a href="/alerts" class="active">⚠️ Alerts</a>
+            <a href="/haccp" class="active">🛡️ HACCP</a>
+            <a href="/alerts">⚠️ Alerts</a>
             <a href="/billing">💳 Billing</a>
             <a href="/logout">🚪 Logout</a>
         </div>
     </nav>
     
     <div class="container">
-        <div class="alert-header">
-            <h1>⚠️ Low Stock Alerts</h1>
-            <p>Items that need immediate reordering</p>
+        <div class="page-header">
+            <h1>🛡️ HACCP Compliance</h1>
+            <p class="page-subtitle">Food safety management and compliance tracking</p>
         </div>
         
-        <div class="quick-actions">
-            <a href="/" class="btn btn-primary">← Dashboard</a>
-            <a href="/inventory" class="btn btn-secondary">View Full Inventory</a>
-        </div>
-        
-        {% if items %}
-        <div class="table-container">
-            <div class="table-wrapper">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Item Name</th>
-                            <th>Category</th>
-                            <th>Current Stock</th>
-                            <th>Reorder Point</th>
-                            <th>Shortage</th>
-                            <th>Cost to Reorder</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in items %}
-                        <tr>
-                            <td class="item-name">{{ item.name }}</td>
-                            <td>{{ item.category }}</td>
-                            <td>{{ item.stock }} {{ item.unit }}</td>
-                            <td>{{ item.reorder_point }} {{ item.unit }}</td>
-                            <td class="shortage">{{ "%.2f"|format(item.reorder_point - item.stock) }} {{ item.unit }}</td>
-                            <td>£{{ "%.2f"|format((item.reorder_point - item.stock) * item.cost) }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">🌡️</div>
+                <div class="stat-number">{{ temps_today }}</div>
+                <div class="stat-label">Temperatures Today</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⚠️</div>
+                <div class="stat-number {% if temp_failures > 0 %}stat-warning{% endif %}">{{ temp_failures }}</div>
+                <div class="stat-label">Temp Failures (7d)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🧹</div>
+                <div class="stat-number">{{ cleaning_tasks }}</div>
+                <div class="stat-label">Cleaning Tasks</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📦</div>
+                <div class="stat-number">{{ deliveries_week }}</div>
+                <div class="stat-label">Deliveries This Week</div>
             </div>
         </div>
         
-        <div class="mobile-cards">
-            {% for item in items %}
-            <div class="alert-card">
-                <div class="alert-card-header">
-                    <div>
-                        <div class="alert-card-title">{{ item.name }}</div>
-                        <div class="alert-card-category">{{ item.category }}</div>
-                    </div>
-                    <span style="background: rgba(231, 76, 60, 0.2); color: #e74c3c; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;">🔴 Reorder</span>
+        <div class="modules-grid">
+            <a href="/haccp/temperatures" class="module-card">
+                <div class="module-icon">🌡️</div>
+                <div class="module-title">Temperature Logs</div>
+                <div class="module-description">Log fridge, freezer, cooking and hot holding temperatures</div>
+            </a>
+            
+            <a href="/haccp/cleaning" class="module-card">
+                <div class="module-icon">🧹</div>
+                <div class="module-title">Cleaning Schedules</div>
+                <div class="module-description">Track cleaning tasks and maintain hygiene records</div>
+            </a>
+            
+            <a href="/haccp/deliveries" class="module-card">
+                <div class="module-icon">📦</div>
+                <div class="module-title">Delivery Inspection</div>
+                <div class="module-description">Record supplier deliveries and quality checks</div>
+            </a>
+
+            <a href="/haccp/reports" class="module-card feature">
+                <div class="module-icon">📄</div>
+                <div class="module-title">Audit Reports</div>
+                <div class="module-description">Generate EHO/FSAI-ready PDF exports for any date range</div>
+            </a>
+
+            <a href="/settings/business" class="module-card">
+                <div class="module-icon">🏢</div>
+                <div class="module-title">Business Settings</div>
+                <div class="module-description">Set business name, FBO registration, and responsible person shown on reports</div>
+            </a>
+        </div>
+        
+        {% if recent_temps %}
+        <div class="recent-section">
+            <h2>Recent Temperature Logs</h2>
+            {% for log in recent_temps %}
+            <div class="log-item">
+                <div class="log-info">
+                    <div class="log-equipment">{{ log.equipment_name }}</div>
+                    <div class="log-meta">{{ log.equipment_type }} • {{ log.logged_at.strftime('%d %b %Y %H:%M') }} • {{ log.logged_by }}</div>
                 </div>
-                <div class="alert-card-grid">
-                    <div class="alert-card-stat">
-                        <div class="alert-card-stat-label">Current Stock</div>
-                        <div class="alert-card-stat-value neutral">{{ item.stock }} {{ item.unit }}</div>
-                    </div>
-                    <div class="alert-card-stat">
-                        <div class="alert-card-stat-label">Reorder At</div>
-                        <div class="alert-card-stat-value neutral">{{ item.reorder_point }} {{ item.unit }}</div>
-                    </div>
-                    <div class="alert-card-stat">
-                        <div class="alert-card-stat-label">Shortage</div>
-                        <div class="alert-card-stat-value">{{ "%.2f"|format(item.reorder_point - item.stock) }} {{ item.unit }}</div>
-                    </div>
-                    <div class="alert-card-stat">
-                        <div class="alert-card-stat-label">Cost to Reorder</div>
-                        <div class="alert-card-stat-value">£{{ "%.2f"|format((item.reorder_point - item.stock) * item.cost) }}</div>
-                    </div>
-                </div>
+                <div class="log-temp {{ log.status }}">{{ log.temperature }}°C</div>
             </div>
             {% endfor %}
-        </div>
-        {% else %}
-        <div class="success-state">
-            <div class="success-icon">✅</div>
-            <h2>All Stock Levels Good!</h2>
-            <p>No items need reordering. Your inventory is well-stocked.</p>
-            <a href="/inventory" class="btn btn-primary">View Inventory</a>
         </div>
         {% endif %}
     </div>
@@ -192,13 +90,6 @@
         function toggleMenu() {
             document.getElementById('mobileMenu').classList.toggle('active');
         }
-        document.addEventListener('click', function(event) {
-            const menu = document.getElementById('mobileMenu');
-            const hamburger = document.querySelector('.hamburger');
-            if (!menu.contains(event.target) && !hamburger.contains(event.target)) {
-                menu.classList.remove('active');
-            }
-        });
     </script>
 </body>
 </html>
