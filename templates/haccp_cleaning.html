@@ -43,12 +43,23 @@
         .flash.success { background: #d4edda; color: #155724; }
         .flash.danger { background: #f8d7da; color: #721c24; }
         .task-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
-        .task-card { border: 1px solid #e1e4e8; border-radius: 8px; padding: 18px; }
+        .task-card { border: 1px solid #e1e4e8; border-radius: 8px; padding: 18px; border-left-width: 5px; }
+        .task-card.due-overdue { border-left-color: #e74c3c; background: #fef5f5; }
+        .task-card.due-due_soon { border-left-color: #f59e0b; background: #fffbeb; }
+        .task-card.due-ok { border-left-color: #27ae60; }
+        .task-card.due-never { border-left-color: #6b7280; background: #f9fafb; }
+        .task-card.due-no_recurrence { border-left-color: #8b5cf6; }
         .task-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
         .task-name { font-weight: 600; }
         .task-actions { display: flex; gap: 6px; flex-shrink: 0; }
         .task-meta { font-size: 13px; color: #718096; margin-bottom: 12px; }
         .task-freq { display: inline-block; background: #e8f5e9; color: #27ae60; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+        .due-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; margin-left: 6px; }
+        .due-badge.overdue { background: #fee2e2; color: #991b1b; }
+        .due-badge.due_soon { background: #fef3c7; color: #78350f; }
+        .due-badge.ok { background: #d1fae5; color: #065f46; }
+        .due-badge.never { background: #e5e7eb; color: #374151; }
+        .due-badge.no_recurrence { background: #ede9fe; color: #5b21b6; }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #edf2f7; font-size: 14px; }
         th { font-weight: 600; color: #4a5568; background: #f7fafc; }
@@ -112,9 +123,12 @@
             {% if tasks %}
             <div class="task-grid">
                 {% for t in tasks %}
-                <div class="task-card">
+                <div class="task-card due-{{ t.due_status }}">
                     <div class="task-header">
-                        <div class="task-name">{{ t.task_name }}</div>
+                        <div class="task-name">
+                            {{ t.task_name }}
+                            <span class="due-badge {{ t.due_status }}">{{ t.due_label }}</span>
+                        </div>
                         <div class="task-actions">
                             <button class="btn btn-sm btn-secondary" onclick='openEditTask({{ t.id }}, {{ t.task_name|tojson }}, {{ (t.area or "")|tojson }}, {{ t.frequency|tojson }}, {{ (t.chemicals_used or "")|tojson }}, {{ (t.instructions or "")|tojson }})'>Edit</button>
                             <form action="/haccp/cleaning/delete-task/{{ t.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Remove {{ t.task_name }} from active tasks? Historical logs will be kept.');">
@@ -152,12 +166,8 @@
                         <label>Frequency *</label>
                         <select name="frequency" required>
                             <option value="">-- Select --</option>
-                            <option>Daily</option>
-                            <option>Weekly</option>
-                            <option>Monthly</option>
-                            <option>Quarterly</option>
-                            <option>Annually</option>
-                            <option>After use</option>
+                            <option>Daily</option><option>Weekly</option><option>Monthly</option>
+                            <option>Quarterly</option><option>Annually</option><option>After use</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -186,18 +196,11 @@
                 {% for log in logs %}
                 <tr {% if log.is_voided %}class="voided-row"{% endif %}>
                     <td>{{ log.completed_at.strftime('%d %b %H:%M') }}</td>
-                    <td>
-                        {{ log.task_name }}
-                        {% if log.is_voided %} <span class="void-badge">VOIDED</span>{% endif %}
-                    </td>
+                    <td>{{ log.task_name }}{% if log.is_voided %} <span class="void-badge">VOIDED</span>{% endif %}</td>
                     <td>{{ log.area or '—' }}</td>
                     <td>{{ log.completed_by }}</td>
                     <td class="{% if log.is_voided %}void-info{% endif %}">
-                        {% if log.is_voided %}
-                            Voided by {{ log.voided_by }}: {{ log.void_reason }}
-                        {% else %}
-                            {{ log.notes or '—' }}
-                        {% endif %}
+                        {% if log.is_voided %}Voided by {{ log.voided_by }}: {{ log.void_reason }}{% else %}{{ log.notes or '—' }}{% endif %}
                     </td>
                     <td>
                         {% if not log.is_voided %}
@@ -227,12 +230,8 @@
                     <div class="form-group">
                         <label>Frequency *</label>
                         <select name="frequency" id="edit_frequency" required>
-                            <option>Daily</option>
-                            <option>Weekly</option>
-                            <option>Monthly</option>
-                            <option>Quarterly</option>
-                            <option>Annually</option>
-                            <option>After use</option>
+                            <option>Daily</option><option>Weekly</option><option>Monthly</option>
+                            <option>Quarterly</option><option>Annually</option><option>After use</option>
                         </select>
                     </div>
                     <div class="form-group">
