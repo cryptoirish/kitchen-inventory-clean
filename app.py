@@ -779,6 +779,7 @@ def get_compliance_alerts(org_id):
             'title': "Failed temperature with no corrective action recorded",
             'detail': f"{fail['equipment_name']}: {fail['temperature']}\u00b0C on {fail['logged_at'].strftime('%d %b %H:%M')}",
             'link': '/haccp/temperatures',
+            'resolvable_id': fail['id'],
         })
 
     # 3. Cleaning tasks overdue based on frequency
