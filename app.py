@@ -1103,6 +1103,37 @@ def void_temperature_log(id):
         print(f"Void temperature error: {e}")
         flash('Error voiding log', 'danger')
         return redirect('/haccp/temperatures')
+        @app.route('/haccp/temperature/resolve/<int:id>', methods=['POST'])
+@login_required
+def resolve_temperature_alert(id):
+    """Adds a corrective action to a previously-failed temperature log,
+    which removes it from the alerts feed and writes the note to the audit trail."""
+    try:
+        org_id = get_current_org_id()
+        action = request.form.get('corrective_action', '').strip()
+        if not action:
+            flash('A corrective action note is required.', 'danger')
+            return redirect(request.referrer or '/haccp')
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE haccp_temperature_logs
+            SET corrective_action = %s
+            WHERE id = %s AND organization_id = %s
+        ''', (
+            f"{action} (resolved by {session.get('user_name', 'Unknown')} on {datetime.now().strftime('%d %b %Y %H:%M')})",
+            id,
+            org_id
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Alert resolved. Corrective action recorded in audit trail.', 'success')
+        return redirect(request.referrer or '/haccp')
+    except Exception as e:
+        print(f"Resolve alert error: {e}")
+        flash('Error resolving alert', 'danger')
+        return redirect(request.referrer or '/haccp')
 
 
 @app.route('/haccp/cleaning')
