@@ -137,6 +137,84 @@ def get_allergen_lookup():
     allergens = get_all_allergens()
     return {a['code']: a for a in allergens}
 
+
+def get_recipe_allergens(recipe_id, org_id):
+    """Returns a dict with 4 sets:
+        from_ingredients: codes derived from recipe_ingredients -> items.allergens
+        from_equipment:   codes from equipment used to prepare this recipe
+        manual:           codes manually added to the recipe
+        combined:         union of all three (what gets declared on PPDS)
+    Each value is a sorted list of unique codes."""
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Ingredients
+    cur.execute('''
+        SELECT i.allergens
+        FROM recipe_ingredients ri
+        JOIN items i ON i.id = ri.inventory_item_id
+        WHERE ri.recipe_id = %s AND i.organization_id = %s
+    ''', (recipe_id, org_id))
+    from_ingredients = set()
+    for row in cur.fetchall():
+        raw = row.get('allergens')
+        if raw is None:
+            continue
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except (ValueError, TypeError):
+                raw = []
+        for code in raw or []:
+            from_ingredients.add(code)
+
+    # Equipment cross-contamination
+    cur.execute('''
+        SELECT DISTINCT ea.allergen_code
+        FROM haccp_recipe_equipment re
+        JOIN haccp_equipment_allergens ea ON ea.equipment_id = re.equipment_id
+        WHERE re.recipe_id = %s AND re.organization_id = %s
+    ''', (recipe_id, org_id))
+    from_equipment = {row['allergen_code'] for row in cur.fetchall()}
+
+    # Manual
+    cur.execute('SELECT manual_allergens FROM recipes WHERE id = %s AND organization_id = %s', (recipe_id, org_id))
+    rec = cur.fetchone()
+    manual = set()
+    if rec and rec.get('manual_allergens'):
+        raw = rec['manual_allergens']
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except (ValueError, TypeError):
+                raw = []
+        for code in raw or []:
+            manual.add(code)
+
+    cur.close()
+    conn.close()
+
+    return {
+        'from_ingredients': sorted(from_ingredients),
+        'from_equipment': sorted(from_equipment),
+        'manual': sorted(manual),
+        'combined': sorted(from_ingredients | from_equipment | manual),
+    }
+
+
+def get_equipment_allergens(equipment_id, org_id):
+    """Returns list of allergen codes flagged on a piece of equipment."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT allergen_code FROM haccp_equipment_allergens
+        WHERE equipment_id = %s AND organization_id = %s
+    ''', (equipment_id, org_id))
+    codes = [row['allergen_code'] for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return codes
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -641,9 +719,28 @@ def recipe_detail(id):
         
         cur.execute('SELECT * FROM items WHERE organization_id = %s ORDER BY name', (org_id,))
         all_items = cur.fetchall()
+
+        # All active equipment for the "link equipment" picker
+        cur.execute('SELECT id, name, equipment_type FROM haccp_equipment WHERE organization_id = %s AND is_active = true ORDER BY name', (org_id,))
+        all_equipment = cur.fetchall()
+
+        # Equipment currently linked to this recipe
+        cur.execute('''
+            SELECT e.id, e.name, e.equipment_type
+            FROM haccp_recipe_equipment re
+            JOIN haccp_equipment e ON e.id = re.equipment_id
+            WHERE re.recipe_id = %s AND re.organization_id = %s
+            ORDER BY e.name
+        ''', (id, org_id))
+        linked_equipment = cur.fetchall()
         
         cur.close()
         conn.close()
+
+        # Allergen data
+        allergen_data = get_recipe_allergens(id, org_id)
+        all_allergens = get_all_allergens()
+        allergen_lookup = {a['code']: a for a in all_allergens}
         
         return render_template('recipe_detail.html',
                              recipe=recipe,
@@ -651,9 +748,15 @@ def recipe_detail(id):
                              total_cost=total_cost,
                              food_cost_percent=food_cost_percent,
                              gross_profit=gross_profit,
-                             all_items=all_items)
+                             all_items=all_items,
+                             all_equipment=all_equipment,
+                             linked_equipment=linked_equipment,
+                             allergen_data=allergen_data,
+                             all_allergens=all_allergens,
+                             allergen_lookup=allergen_lookup)
     except Exception as e:
         print(f"Recipe detail error: {e}")
+        traceback.print_exc()
         return redirect('/recipes')
 
 @app.route('/recipes/<int:recipe_id>/add-ingredient', methods=['POST'])
@@ -708,6 +811,119 @@ def delete_recipe(id):
         return redirect('/recipes')
     except Exception as e:
         return redirect('/recipes')
+
+
+@app.route('/recipes/<int:recipe_id>/save-manual-allergens', methods=['POST'])
+@login_required
+def save_recipe_manual_allergens(recipe_id):
+    """Updates the list of manually-declared allergens on a recipe.
+    Used for hidden allergens not on the ingredient list (e.g. 'fried in shared peanut oil')."""
+    try:
+        org_id = get_current_org_id()
+        codes = parse_allergen_codes(request.form)
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE recipes
+            SET manual_allergens = %s::jsonb, updated_at = %s
+            WHERE id = %s AND organization_id = %s
+        ''', (json.dumps(codes), datetime.now(), recipe_id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Manual allergens updated.', 'success')
+        return redirect(f'/recipes/{recipe_id}')
+    except Exception as e:
+        print(f"Save manual allergens error: {e}")
+        flash('Error saving allergens', 'danger')
+        return redirect(f'/recipes/{recipe_id}')
+
+
+@app.route('/recipes/<int:recipe_id>/link-equipment', methods=['POST'])
+@login_required
+def link_recipe_equipment(recipe_id):
+    """Links a piece of equipment to this recipe (used to derive cross-contamination)."""
+    try:
+        org_id = get_current_org_id()
+        equipment_id = request.form.get('equipment_id')
+        if not equipment_id:
+            flash('Pick an equipment item to link.', 'danger')
+            return redirect(f'/recipes/{recipe_id}')
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO haccp_recipe_equipment (organization_id, recipe_id, equipment_id)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (recipe_id, equipment_id) DO NOTHING
+        ''', (org_id, recipe_id, equipment_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Equipment linked to recipe.', 'success')
+        return redirect(f'/recipes/{recipe_id}')
+    except Exception as e:
+        print(f"Link equipment error: {e}")
+        flash('Error linking equipment', 'danger')
+        return redirect(f'/recipes/{recipe_id}')
+
+
+@app.route('/recipes/<int:recipe_id>/unlink-equipment/<int:equipment_id>', methods=['POST'])
+@login_required
+def unlink_recipe_equipment(recipe_id, equipment_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            DELETE FROM haccp_recipe_equipment
+            WHERE recipe_id = %s AND equipment_id = %s AND organization_id = %s
+        ''', (recipe_id, equipment_id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Equipment unlinked.', 'success')
+        return redirect(f'/recipes/{recipe_id}')
+    except Exception as e:
+        print(f"Unlink equipment error: {e}")
+        flash('Error unlinking equipment', 'danger')
+        return redirect(f'/recipes/{recipe_id}')
+
+
+@app.route('/haccp/equipment/<int:equipment_id>/allergens', methods=['POST'])
+@login_required
+def save_equipment_allergens(equipment_id):
+    """Replaces the cross-contamination allergen flags on a piece of equipment.
+    Form sends allergen_<code>=on for each ticked box."""
+    try:
+        org_id = get_current_org_id()
+        codes = parse_allergen_codes(request.form)
+        conn = get_db()
+        cur = conn.cursor()
+        # Verify equipment belongs to this org
+        cur.execute('SELECT id FROM haccp_equipment WHERE id = %s AND organization_id = %s', (equipment_id, org_id))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            flash('Equipment not found.', 'danger')
+            return redirect('/haccp/temperatures')
+        # Wipe existing flags and re-insert (simpler and atomic enough for this volume)
+        cur.execute('DELETE FROM haccp_equipment_allergens WHERE equipment_id = %s AND organization_id = %s', (equipment_id, org_id))
+        for code in codes:
+            cur.execute('''
+                INSERT INTO haccp_equipment_allergens (organization_id, equipment_id, allergen_code, notes)
+                VALUES (%s, %s, %s, %s)
+            ''', (org_id, equipment_id, code, request.form.get(f'note_{code}', '')))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Cross-contamination allergens updated.', 'success')
+        return redirect('/haccp/temperatures')
+    except Exception as e:
+        print(f"Save equipment allergens error: {e}")
+        traceback.print_exc()
+        flash('Error saving allergens', 'danger')
+        return redirect('/haccp/temperatures')
+
 
 @app.route('/billing')
 @login_required
@@ -1046,6 +1262,18 @@ def haccp_temperatures():
         cur.execute('SELECT * FROM haccp_equipment WHERE organization_id = %s AND is_active = true ORDER BY name', (org_id,))
         equipment = cur.fetchall()
 
+        # Annotate each equipment row with its allergen codes (for cross-contamination flagging UI)
+        cur.execute('''
+            SELECT equipment_id, allergen_code
+            FROM haccp_equipment_allergens
+            WHERE organization_id = %s
+        ''', (org_id,))
+        eq_allergens = {}
+        for row in cur.fetchall():
+            eq_allergens.setdefault(row['equipment_id'], []).append(row['allergen_code'])
+        for eq in equipment:
+            eq['allergen_codes'] = eq_allergens.get(eq['id'], [])
+
         cur.execute('''
             SELECT tl.*, e.name as equipment_name, e.equipment_type, e.min_temp, e.max_temp
             FROM haccp_temperature_logs tl
@@ -1059,7 +1287,13 @@ def haccp_temperatures():
         cur.close()
         conn.close()
 
-        return render_template('haccp_temperatures.html', equipment=equipment, logs=logs)
+        all_allergens = get_all_allergens()
+        allergen_lookup = {a['code']: a for a in all_allergens}
+
+        return render_template('haccp_temperatures.html',
+                             equipment=equipment, logs=logs,
+                             all_allergens=all_allergens,
+                             allergen_lookup=allergen_lookup)
     except Exception as e:
         print(f"Temperature error: {e}")
         traceback.print_exc()
