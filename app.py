@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import csv
+import json
 from io import StringIO
 import stripe
 from io import BytesIO
@@ -107,6 +108,34 @@ def get_current_org_id():
     if 'organization_id' in session:
         return session['organization_id']
     return None
+
+
+def get_all_allergens():
+    """Returns the 14 statutory allergens as a list of dicts ordered by sort_order.
+    Cached per-request via get_db (cheap query)."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('SELECT id, code, display_name, description, icon, sort_order FROM haccp_allergens ORDER BY sort_order')
+    allergens = cur.fetchall()
+    cur.close()
+    conn.close()
+    return allergens
+
+
+def parse_allergen_codes(form_data):
+    """Extracts allergen codes from a checkbox form (allergen_<code>=on)."""
+    codes = []
+    for key in form_data:
+        if key.startswith('allergen_') and form_data.get(key) == 'on':
+            codes.append(key[len('allergen_'):])
+    return codes
+
+
+def get_allergen_lookup():
+    """Returns dict keyed by code -> {display_name, icon, description}.
+    Useful for templates rendering allergen badges from a stored code list."""
+    allergens = get_all_allergens()
+    return {a['code']: a for a in allergens}
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -249,6 +278,7 @@ def inventory():
         org_id = get_current_org_id()
         search = request.args.get('search', '')
         category_filter = request.args.get('category', '')
+        allergen_filter = request.args.get('allergen', '')
         
         conn = get_db()
         cur = conn.cursor()
@@ -264,10 +294,27 @@ def inventory():
             query += ' AND category = %s'
             params.append(category_filter)
         
+        if allergen_filter:
+            query += ' AND allergens @> %s::jsonb'
+            params.append(f'["{allergen_filter}"]')
+        
         query += ' ORDER BY name'
         
         cur.execute(query, params)
         items = cur.fetchall()
+        
+        # Normalise the allergens JSON field for each item — Jinja can't parse JSON cleanly
+        for item in items:
+            raw = item.get('allergens')
+            if raw is None:
+                item['allergens_list'] = []
+            elif isinstance(raw, str):
+                try:
+                    item['allergens_list'] = json.loads(raw)
+                except (ValueError, TypeError):
+                    item['allergens_list'] = []
+            else:
+                item['allergens_list'] = list(raw)
         
         cur.execute('SELECT DISTINCT category FROM items WHERE organization_id = %s AND category IS NOT NULL ORDER BY category', (org_id,))
         categories = [row['category'] for row in cur.fetchall()]
@@ -279,12 +326,18 @@ def inventory():
         cur.close()
         conn.close()
         
+        allergens = get_all_allergens()
+        allergen_lookup = {a['code']: a for a in allergens}
+        
         return render_template('inventory.html', 
                              items=items, 
                              categories=categories,
                              search=search,
                              category_filter=category_filter,
-                             total_value=total_value)
+                             allergen_filter=allergen_filter,
+                             total_value=total_value,
+                             allergens=allergens,
+                             allergen_lookup=allergen_lookup)
     except Exception as e:
         print(f"Inventory error: {e}")
         traceback.print_exc()
@@ -350,11 +403,12 @@ def add():
     if request.method == 'POST':
         try:
             org_id = get_current_org_id()
+            allergen_codes = parse_allergen_codes(request.form)
             conn = get_db()
             cur = conn.cursor()
             cur.execute('''
-                INSERT INTO items (organization_id, name, category, stock, reorder_point, cost, unit, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO items (organization_id, name, category, stock, reorder_point, cost, unit, allergens, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
             ''', (
                 org_id,
                 request.form['name'],
@@ -363,6 +417,7 @@ def add():
                 request.form['reorder'],
                 request.form['cost'],
                 request.form['unit'],
+                json.dumps(allergen_codes),
                 datetime.now()
             ))
             conn.commit()
@@ -372,8 +427,66 @@ def add():
             return redirect('/inventory')
         except Exception as e:
             print(f"Add item error: {e}")
+            traceback.print_exc()
             flash('Error adding item', 'danger')
-    return render_template('add.html')
+    allergens = get_all_allergens()
+    return render_template('add.html', allergens=allergens)
+
+
+@app.route('/inventory/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+def edit_item(id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+
+        if request.method == 'POST':
+            allergen_codes = parse_allergen_codes(request.form)
+            cur.execute('''
+                UPDATE items
+                SET name = %s, category = %s, stock = %s, reorder_point = %s,
+                    cost = %s, unit = %s, allergens = %s::jsonb, updated_at = %s
+                WHERE id = %s AND organization_id = %s
+            ''', (
+                request.form['name'],
+                request.form['category'],
+                request.form['stock'],
+                request.form['reorder'],
+                request.form['cost'],
+                request.form['unit'],
+                json.dumps(allergen_codes),
+                datetime.now(),
+                id,
+                org_id
+            ))
+            conn.commit()
+            cur.close()
+            conn.close()
+            flash('Item updated!', 'success')
+            return redirect('/inventory')
+
+        cur.execute('SELECT * FROM items WHERE id = %s AND organization_id = %s', (id, org_id))
+        item = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not item:
+            flash('Item not found', 'danger')
+            return redirect('/inventory')
+
+        allergens = get_all_allergens()
+        # Parse the JSONB allergens field for the template
+        item_allergens = item.get('allergens') or []
+        if isinstance(item_allergens, str):
+            item_allergens = json.loads(item_allergens)
+
+        return render_template('edit_item.html', item=item, allergens=allergens, item_allergens=item_allergens)
+    except Exception as e:
+        print(f"Edit item error: {e}")
+        traceback.print_exc()
+        flash('Error loading item', 'danger')
+        return redirect('/inventory')
 
 @app.route('/update/<int:id>', methods=['POST'])
 @login_required
