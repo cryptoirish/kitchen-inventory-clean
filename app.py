@@ -1104,7 +1104,9 @@ def void_temperature_log(id):
         print(f"Void temperature error: {e}")
         flash('Error voiding log', 'danger')
         return redirect('/haccp/temperatures')
-        @app.route('/haccp/temperature/resolve/<int:id>', methods=['POST'])
+
+
+@app.route('/haccp/temperature/resolve/<int:id>', methods=['POST'])
 @login_required
 def resolve_temperature_alert(id):
     """Adds a corrective action to a previously-failed temperature log,
