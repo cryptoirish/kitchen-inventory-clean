@@ -34,7 +34,6 @@
         .alert-pill.critical { background: #fee2e2; color: #991b1b; }
         .alert-pill.warning { background: #fef3c7; color: #78350f; }
         .alert-pill.info { background: #dbeafe; color: #1e40af; }
-        .alert-pill.ok { background: #d1fae5; color: #065f46; }
         .alert-list { margin-top: 10px; }
         .alert-item { padding: 10px 0; border-top: 1px solid #edf2f7; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
         .alert-item:first-child { border-top: none; padding-top: 0; }
@@ -42,7 +41,10 @@
         .alert-item-body { flex: 1; min-width: 0; }
         .alert-item-title { font-size: 14px; font-weight: 600; }
         .alert-item-detail { font-size: 12px; color: #718096; margin-top: 2px; }
-        .alert-item-link { color: #27ae60; text-decoration: none; font-size: 12px; font-weight: 600; flex-shrink: 0; padding-top: 2px; }
+        .alert-item-actions { display: flex; gap: 6px; flex-shrink: 0; padding-top: 2px; }
+        .alert-item-link { color: #27ae60; text-decoration: none; font-size: 12px; font-weight: 600; }
+        .alert-resolve-btn { background: #27ae60; color: #fff; border: none; padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; }
+        .alert-resolve-btn:hover { background: #219a52; }
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 30px; }
         .stat-card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         .stat-icon { font-size: 28px; margin-bottom: 8px; }
@@ -66,6 +68,17 @@
         .log-temp { font-weight: 700; font-size: 16px; padding: 6px 12px; border-radius: 6px; }
         .log-temp.pass { background: #d4edda; color: #155724; }
         .log-temp.fail { background: #f8d7da; color: #721c24; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: #fff; border-radius: 10px; padding: 25px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; }
+        .modal h3 { margin-bottom: 8px; font-size: 18px; }
+        .modal p.modal-context { font-size: 13px; color: #718096; margin-bottom: 15px; }
+        .modal label { font-size: 13px; font-weight: 500; color: #4a5568; display: block; margin-bottom: 5px; }
+        .modal textarea { width: 100%; padding: 10px 12px; border: 1px solid #e1e4e8; border-radius: 6px; font-size: 14px; font-family: inherit; }
+        .modal textarea:focus { outline: none; border-color: #27ae60; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .btn { background: #27ae60; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; }
+        .btn-secondary { background: #718096; }
         @media (max-width: 768px) {
             .nav-links { display: none; }
             .hamburger { display: flex; }
@@ -73,7 +86,7 @@
             .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
             .stat-card { padding: 15px; }
             .stat-number { font-size: 24px; }
-            .alert-item { flex-direction: column; align-items: stretch; gap: 4px; }
+            .alert-item { flex-direction: column; align-items: stretch; gap: 6px; }
         }
     </style>
 </head>
@@ -101,6 +114,12 @@
             <p class="page-subtitle">Food safety management and compliance tracking</p>
         </div>
 
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div style="background: {% if category == 'success' %}#d4edda{% else %}#f8d7da{% endif %}; color: {% if category == 'success' %}#155724{% else %}#721c24{% endif %}; padding: 12px 16px; border-radius: 6px; margin-bottom: 15px; font-size: 14px;">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
         {% set total_alerts = (alerts.critical|length) + (alerts.warning|length) + (alerts.info|length) %}
         <div class="alerts-banner {% if alerts.critical %}has-critical{% elif alerts.warning %}has-warning{% else %}all-clear{% endif %}">
             {% if total_alerts == 0 %}
@@ -113,7 +132,7 @@
                     {% if alerts.warning %}<span class="alert-pill warning">⚠️ {{ alerts.warning|length }} warning</span>{% endif %}
                     {% if alerts.info %}<span class="alert-pill info">ℹ️ {{ alerts.info|length }} info</span>{% endif %}
                 </div>
-                <div class="alert-list" id="alertList">
+                <div class="alert-list">
                     {% for alert in alerts.critical %}
                     <div class="alert-item">
                         <span class="alert-item-icon">🚨</span>
@@ -121,7 +140,13 @@
                             <div class="alert-item-title">{{ alert.title }}</div>
                             <div class="alert-item-detail">{{ alert.detail }}</div>
                         </div>
-                        <a href="{{ alert.link }}" class="alert-item-link">Fix →</a>
+                        <div class="alert-item-actions">
+                            {% if alert.resolvable_id %}
+                            <button class="alert-resolve-btn" onclick='openResolveModal({{ alert.resolvable_id }}, {{ alert.detail|tojson }})'>Resolve</button>
+                            {% else %}
+                            <a href="{{ alert.link }}" class="alert-item-link">Fix →</a>
+                            {% endif %}
+                        </div>
                     </div>
                     {% endfor %}
                     {% for alert in alerts.warning[:5] %}
@@ -131,7 +156,9 @@
                             <div class="alert-item-title">{{ alert.title }}</div>
                             <div class="alert-item-detail">{{ alert.detail }}</div>
                         </div>
-                        <a href="{{ alert.link }}" class="alert-item-link">View →</a>
+                        <div class="alert-item-actions">
+                            <a href="{{ alert.link }}" class="alert-item-link">View →</a>
+                        </div>
                     </div>
                     {% endfor %}
                     {% if alerts.warning|length > 5 %}
@@ -146,7 +173,9 @@
                             <div class="alert-item-title">{{ alert.title }}</div>
                             <div class="alert-item-detail">{{ alert.detail }}</div>
                         </div>
-                        <a href="{{ alert.link }}" class="alert-item-link">Set up →</a>
+                        <div class="alert-item-actions">
+                            <a href="{{ alert.link }}" class="alert-item-link">Set up →</a>
+                        </div>
                     </div>
                     {% endfor %}
                 </div>
@@ -220,8 +249,36 @@
         {% endif %}
     </div>
 
+    <!-- Resolve Alert Modal -->
+    <div class="modal-overlay" id="resolveModal">
+        <div class="modal">
+            <h3>Resolve Failed Temperature</h3>
+            <p class="modal-context" id="resolveContext"></p>
+            <p class="modal-context" style="background: #fef3c7; color: #78350f; padding: 10px; border-radius: 6px;">
+                <strong>HACCP requirement:</strong> A corrective action must be recorded for every failed temperature reading. This note becomes part of the permanent audit trail.
+            </p>
+            <form id="resolveForm" method="POST">
+                <label>Corrective action taken *</label>
+                <textarea name="corrective_action" rows="3" required placeholder="e.g. Equipment limits were set incorrectly during initial setup, recalibrated and verified 25 Apr"></textarea>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn">Record &amp; Resolve</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         function toggleMenu() { document.getElementById('mobileMenu').classList.toggle('active'); }
+        function openResolveModal(id, context) {
+            document.getElementById('resolveForm').action = '/haccp/temperature/resolve/' + id;
+            document.getElementById('resolveContext').textContent = context;
+            document.getElementById('resolveModal').classList.add('active');
+        }
+        function closeModal() { document.getElementById('resolveModal').classList.remove('active'); }
+        document.getElementById('resolveModal').addEventListener('click', e => {
+            if (e.target.id === 'resolveModal') closeModal();
+        });
     </script>
 </body>
 </html>
