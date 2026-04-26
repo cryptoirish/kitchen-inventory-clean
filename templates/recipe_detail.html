@@ -1,289 +1,287 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>{{ recipe.name }} - YieldGuard</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ recipe.name }} - YieldGuard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a202c; color: #e2e8f0; min-height: 100vh; }
-        
-        .navbar { background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%); padding: 15px 0; border-bottom: 1px solid #27ae60; position: sticky; top: 0; z-index: 1000; }
-        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 15px; display: flex; justify-content: space-between; align-items: center; }
-        .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-        .logo-icon { width: 40px; height: 40px; background: linear-gradient(135deg, #27ae60 0%, #229954 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-        .logo-text { color: #27ae60; font-size: 20px; font-weight: bold; }
-        .nav-links { display: flex; gap: 10px; align-items: center; }
-        .nav-links a { color: #e2e8f0; text-decoration: none; font-weight: 500; padding: 8px 14px; border-radius: 8px; transition: all 0.3s; font-size: 14px; }
-        .nav-links a:hover { background: rgba(39, 174, 96, 0.1); color: #27ae60; }
-        
-        .hamburger { display: none; flex-direction: column; gap: 4px; cursor: pointer; padding: 10px; border: none; background: none; }
-        .hamburger span { width: 25px; height: 3px; background: #27ae60; border-radius: 2px; }
-        
-        .mobile-menu { display: none; position: fixed; top: 70px; left: 0; right: 0; background: #1a202c; padding: 20px; border-bottom: 2px solid #27ae60; flex-direction: column; gap: 10px; z-index: 999; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .mobile-menu.active { display: flex; }
-        .mobile-menu a { color: #e2e8f0; text-decoration: none; font-weight: 500; padding: 15px 20px; border-radius: 10px; font-size: 16px; border: 1px solid #374151; }
-        .mobile-menu a:hover, .mobile-menu a.active { background: rgba(39, 174, 96, 0.1); color: #27ae60; border-color: #27ae60; }
-        
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px 15px; }
-        
-        .page-header { background: linear-gradient(135deg, #2d3748 0%, #374151 100%); padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #4a5568; }
-        .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; flex-wrap: wrap; }
-        .page-header h1 { color: #27ae60; font-size: 26px; margin-bottom: 10px; }
-        .recipe-meta { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-        .meta-badge { background: #1a202c; padding: 6px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #4a5568; }
-        
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .stat-card { background: linear-gradient(135deg, #2d3748 0%, #374151 100%); padding: 18px; border-radius: 12px; border: 1px solid #4a5568; text-align: center; }
-        .stat-value { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
-        .stat-label { color: #a0aec0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .good { color: #27ae60; }
-        .warning { color: #f1c40f; }
-        .danger { color: #e74c3c; }
-        
-        .section { background: #2d3748; padding: 20px 15px; border-radius: 12px; border: 1px solid #4a5568; margin-bottom: 20px; }
-        .section h2 { color: #27ae60; font-size: 20px; margin-bottom: 15px; }
-        
-        .btn { display: inline-block; padding: 10px 18px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; transition: all 0.3s; cursor: pointer; border: none; text-align: center; }
-        .btn-primary { background: linear-gradient(135deg, #27ae60 0%, #229954 100%); color: white; }
-        .btn-primary:hover { transform: translateY(-2px); }
-        .btn-secondary { background: #374151; color: #e2e8f0; border: 1px solid #4a5568; }
-        .btn-danger { background: #e74c3c; color: white; }
-        .btn-sm { padding: 6px 12px; font-size: 12px; }
-        
-        .add-ingredient-form { background: #374151; padding: 15px; border-radius: 10px; margin-bottom: 15px; }
-        .add-ingredient-form h3 { color: #cbd5e0; margin-bottom: 12px; font-size: 14px; }
-        .form-row { display: grid; grid-template-columns: 2fr 1fr 1.5fr auto; gap: 10px; align-items: end; }
-        label { display: block; margin-bottom: 5px; font-size: 12px; color: #cbd5e0; font-weight: 600; }
-        input, select { padding: 10px; background: #1a202c; border: 1px solid #4a5568; border-radius: 6px; color: #e2e8f0; font-size: 14px; width: 100%; }
-        input:focus, select:focus { outline: none; border-color: #27ae60; }
-        
-        /* Desktop Table */
-        .table-wrapper { overflow-x: auto; background: #1a202c; border-radius: 8px; }
-        table { width: 100%; border-collapse: collapse; min-width: 700px; }
-        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #4a5568; }
-        th { background: #374151; color: #27ae60; font-weight: 600; text-transform: uppercase; font-size: 12px; }
-        tbody tr:hover { background: rgba(39, 174, 96, 0.05); }
-        
-        .empty-ingredients { text-align: center; padding: 30px; color: #a0aec0; font-size: 14px; }
-        
-        /* Mobile Cards */
-        .mobile-ingredients { display: none; }
-        .ingredient-card { background: #1a202c; border: 1px solid #4a5568; border-radius: 10px; padding: 15px; margin-bottom: 10px; }
-        .ingredient-card-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px; gap: 10px; }
-        .ingredient-name { font-weight: bold; color: #e2e8f0; font-size: 15px; }
-        .ingredient-details { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-        .detail-item { font-size: 13px; }
-        .detail-label { color: #a0aec0; font-size: 11px; text-transform: uppercase; margin-bottom: 2px; }
-        .detail-value { color: #e2e8f0; font-weight: 600; }
-        .detail-value.cost { color: #27ae60; }
-        
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f6fa; color: #2c3e50; }
+        .navbar { background: #fff; border-bottom: 1px solid #e1e4e8; padding: 0 20px; position: sticky; top: 0; z-index: 100; }
+        .nav-container { max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 64px; }
+        .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #2c3e50; font-weight: 700; font-size: 20px; }
+        .logo-icon { font-size: 28px; }
+        .nav-links { display: flex; gap: 24px; }
+        .nav-links a { text-decoration: none; color: #4a5568; font-weight: 500; font-size: 14px; }
+        .hamburger { display: none; background: none; border: none; cursor: pointer; flex-direction: column; gap: 4px; }
+        .hamburger span { display: block; width: 24px; height: 2px; background: #2c3e50; }
+        .mobile-menu { display: none; position: absolute; top: 64px; left: 0; right: 0; background: #fff; border-bottom: 1px solid #e1e4e8; padding: 10px 0; }
+        .mobile-menu.active { display: block; }
+        .mobile-menu a { display: block; padding: 12px 20px; text-decoration: none; color: #4a5568; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 30px 20px; }
+        .back-link { color: #27ae60; text-decoration: none; font-size: 14px; margin-bottom: 15px; display: inline-block; }
+        .page-header { margin-bottom: 25px; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px; }
+        .page-header h1 { font-size: 28px; margin-bottom: 6px; }
+        .page-subtitle { color: #718096; font-size: 14px; }
+        .card { background: #fff; border-radius: 10px; padding: 25px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .card h2 { font-size: 17px; margin-bottom: 15px; }
+        .card h2 .subtle { color: #a0aec0; font-weight: 400; font-size: 13px; }
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .stat { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .stat-label { font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+        .stat-value { font-size: 22px; font-weight: 700; }
+        .stat-value.profit { color: #27ae60; }
+        .stat-value.cost { color: #e74c3c; }
+        .allergen-card { border-left: 5px solid #f59e0b; }
+        .allergen-card.has-warning { border-left-color: #e74c3c; background: #fef5f5; }
+        .allergen-card.all-clear { border-left-color: #27ae60; }
+        .allergen-section { margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px dashed #edf2f7; }
+        .allergen-section:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+        .allergen-section-title { font-size: 13px; font-weight: 600; color: #4a5568; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .allergen-section-title .help { color: #a0aec0; font-weight: 400; font-size: 12px; text-transform: none; letter-spacing: 0; }
+        .allergen-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+        .allergen-badge { display: inline-flex; align-items: center; padding: 4px 8px; background: #fef3c7; color: #78350f; border-radius: 5px; font-size: 12px; font-weight: 600; gap: 4px; }
+        .allergen-badge.combined { background: #fee2e2; color: #991b1b; padding: 6px 10px; font-size: 13px; }
+        .allergen-badge.from-equipment { background: #fed7aa; color: #7c2d12; }
+        .allergen-badge.from-manual { background: #ddd6fe; color: #5b21b6; }
+        .allergen-badge .icon { font-size: 13px; }
+        .allergen-empty { color: #a0aec0; font-style: italic; font-size: 13px; }
+        .combined-banner { background: #fff7ed; padding: 14px 16px; border-radius: 8px; margin-bottom: 18px; }
+        .combined-banner.empty { background: #f0fdf4; }
+        .combined-title { font-size: 13px; font-weight: 700; color: #2c3e50; margin-bottom: 8px; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-group.full { grid-column: 1 / -1; }
+        label { font-size: 13px; font-weight: 500; color: #4a5568; }
+        input, select, textarea { padding: 10px 12px; border: 1px solid #e1e4e8; border-radius: 6px; font-size: 14px; font-family: inherit; }
+        .ingredient-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #edf2f7; gap: 10px; }
+        .ingredient-row:last-child { border-bottom: none; }
+        .ingredient-name { font-weight: 600; }
+        .ingredient-meta { font-size: 12px; color: #718096; }
+        .ingredient-cost { font-size: 13px; font-weight: 600; color: #4a5568; }
+        .equipment-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #f7fafc; border-radius: 6px; margin-bottom: 6px; gap: 10px; }
+        .equipment-name { font-weight: 600; font-size: 14px; }
+        .equipment-meta { font-size: 12px; color: #718096; }
+        .btn { background: #27ae60; color: #fff; border: none; padding: 9px 18px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; }
+        .btn:hover { background: #219a52; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .btn-secondary { background: #fff; color: #4a5568; border: 1px solid #e1e4e8; }
+        .btn-secondary:hover { background: #f7fafc; }
+        .btn-danger { background: #e74c3c; }
+        .btn-danger:hover { background: #c0392b; }
+        .flash { padding: 12px 16px; border-radius: 6px; margin-bottom: 15px; font-size: 14px; }
+        .flash.success { background: #d4edda; color: #155724; }
+        .flash.danger { background: #f8d7da; color: #721c24; }
+        .empty { color: #a0aec0; font-style: italic; padding: 14px 0; }
+        .allergen-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 8px; }
+        .allergen-option { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid #e1e4e8; border-radius: 6px; cursor: pointer; font-size: 13px; }
+        .allergen-option:has(input:checked) { border-color: #f59e0b; background: #fffbeb; }
         @media (max-width: 768px) {
             .nav-links { display: none; }
             .hamburger { display: flex; }
-            .logo-text { font-size: 18px; }
-            .container { padding: 15px 10px; }
-            .page-header h1 { font-size: 22px; }
-            .header-top { flex-direction: column; }
-            .header-top a { width: 100%; }
-            .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-            .stat-card { padding: 12px 8px; }
-            .stat-value { font-size: 18px; }
-            .stat-label { font-size: 10px; }
-            .form-row { grid-template-columns: 1fr; gap: 12px; }
-            .table-wrapper { display: none; }
-            .mobile-ingredients { display: block; }
+            .form-grid { grid-template-columns: 1fr; }
+            .allergen-grid { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <a href="/" class="logo">
-                <div class="logo-icon">🍳</div>
-                <div class="logo-text">YieldGuard</div>
-            </a>
+            <a href="/" class="logo"><div class="logo-icon">🍳</div><div>YieldGuard</div></a>
             <div class="nav-links">
-                <a href="/">Dashboard</a>
-                <a href="/inventory">Inventory</a>
-                <a href="/recipes" style="color: #27ae60;">Recipes</a>
-                <a href="/alerts">Alerts</a>
-                <a href="/billing">Billing</a>
-                <a href="/logout">Logout</a>
+                <a href="/">Dashboard</a><a href="/inventory">Inventory</a><a href="/recipes" style="color: #27ae60;">Recipes</a>
+                <a href="/haccp">HACCP</a><a href="/alerts">Alerts</a><a href="/billing">Billing</a><a href="/logout">Logout</a>
             </div>
-            <button class="hamburger" onclick="toggleMenu()">
-                <span></span><span></span><span></span>
-            </button>
+            <button class="hamburger" onclick="toggleMenu()"><span></span><span></span><span></span></button>
         </div>
         <div class="mobile-menu" id="mobileMenu">
-            <a href="/">📊 Dashboard</a>
-            <a href="/inventory">📦 Inventory</a>
-            <a href="/recipes" class="active">🍽️ Recipes</a>
-            <a href="/alerts">⚠️ Alerts</a>
-            <a href="/billing">💳 Billing</a>
-            <a href="/logout">🚪 Logout</a>
+            <a href="/">📊 Dashboard</a><a href="/inventory">📦 Inventory</a><a href="/recipes">🍽️ Recipes</a>
+            <a href="/haccp">🛡️ HACCP</a><a href="/alerts">⚠️ Alerts</a><a href="/billing">💳 Billing</a><a href="/logout">🚪 Logout</a>
         </div>
     </nav>
-    
+
     <div class="container">
+        <a href="/recipes" class="back-link">← Back to Recipes</a>
         <div class="page-header">
-            <div class="header-top">
-                <div>
-                    <h1>{{ recipe.name }}</h1>
-                    <div class="recipe-meta">
-                        <span class="meta-badge">📁 {{ recipe.category }}</span>
-                        <span class="meta-badge">🍽️ {{ recipe.servings }} serving(s)</span>
-                        <span class="meta-badge">💷 £{{ "%.2f"|format(recipe.selling_price) }}</span>
-                        {% if recipe.portion_size %}<span class="meta-badge">📏 {{ recipe.portion_size }}</span>{% endif %}
-                    </div>
-                </div>
-                <a href="/recipes" class="btn btn-secondary">← Back</a>
+            <div>
+                <h1>🍽️ {{ recipe.name }}</h1>
+                <p class="page-subtitle">{{ recipe.category or 'Uncategorised' }} • {{ recipe.servings }} servings • {{ recipe.portion_size or '' }}</p>
+            </div>
+            <a href="/recipes/delete/{{ recipe.id }}" class="btn btn-secondary" onclick="return confirm('Delete this recipe?');">Delete recipe</a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="stats-row">
+            <div class="stat">
+                <div class="stat-label">Total cost</div>
+                <div class="stat-value cost">£{{ "%.2f"|format(total_cost) }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Selling price</div>
+                <div class="stat-value">£{{ "%.2f"|format(recipe.selling_price or 0) }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Gross profit</div>
+                <div class="stat-value profit">£{{ "%.2f"|format(gross_profit) }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Food cost %</div>
+                <div class="stat-value">{{ "%.1f"|format(food_cost_percent) }}%</div>
             </div>
         </div>
-        
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-value">£{{ "%.2f"|format(total_cost) }}</div>
-                <div class="stat-label">Total Cost</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value {% if food_cost_percent > 35 %}danger{% elif food_cost_percent > 30 %}warning{% else %}good{% endif %}">
-                    {{ "%.1f"|format(food_cost_percent) }}%
+
+        <!-- ALLERGEN PANEL -->
+        <div class="card allergen-card {% if allergen_data.combined %}has-warning{% else %}all-clear{% endif %}">
+            <h2>⚠️ Allergens <span class="subtle">— what would print on a PPDS label</span></h2>
+
+            {% if allergen_data.combined %}
+            <div class="combined-banner">
+                <div class="combined-title">CONTAINS:</div>
+                <div class="allergen-badges">
+                    {% for code in allergen_data.combined %}
+                    {% if code in allergen_lookup %}
+                    <span class="allergen-badge combined">
+                        <span class="icon">{{ allergen_lookup[code].icon }}</span>{{ allergen_lookup[code].display_name }}
+                    </span>
+                    {% endif %}
+                    {% endfor %}
                 </div>
-                <div class="stat-label">Food Cost %</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value good">£{{ "%.2f"|format(gross_profit) }}</div>
-                <div class="stat-label">Gross Profit</div>
-            </div>
-        </div>
-        
-        <div class="section">
-            <h2>🥗 Ingredients</h2>
-            
-            <div class="add-ingredient-form">
-                <h3>Add Ingredient</h3>
-                <form method="POST" action="/recipes/{{ recipe.id }}/add-ingredient">
-                    <div class="form-row">
-                        <div>
-                            <label>Ingredient</label>
-                            <select name="item_id" required>
-                                <option value="">Select...</option>
-                                {% for item in all_items %}
-                                <option value="{{ item.id }}">{{ item.name }} (£{{ "%.2f"|format(item.cost) }}/{{ item.unit }})</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div>
-                            <label>Quantity</label>
-                            <input type="number" name="quantity" step="0.01" placeholder="0.00" required>
-                        </div>
-                        <div>
-                            <label>Notes (optional)</label>
-                            <input type="text" name="notes" placeholder="e.g., diced">
-                        </div>
-                        <div>
-                            <label style="visibility: hidden;">Add</label>
-                            <button type="submit" class="btn btn-primary">Add</button>
-                        </div>
-                    </div>
-                </form>
-            </div>
-            
-            {% if ingredients %}
-            <!-- Desktop Table -->
-            <div class="table-wrapper">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Ingredient</th>
-                            <th>Quantity</th>
-                            <th>Unit Cost</th>
-                            <th>Line Cost</th>
-                            <th>Notes</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for ing in ingredients %}
-                        <tr>
-                            <td><strong>{{ ing.item_name }}</strong></td>
-                            <td>{{ ing.quantity }} {{ ing.unit }}</td>
-                            <td>£{{ "%.2f"|format(ing.unit_cost) }}/{{ ing.unit }}</td>
-                            <td><strong>£{{ "%.2f"|format(ing.ingredient_cost) }}</strong></td>
-                            <td>{{ ing.notes or '-' }}</td>
-                            <td>
-                                <a href="/recipes/{{ recipe.id }}/remove-ingredient/{{ ing.id }}" class="btn btn-danger btn-sm" onclick="return confirm('Remove this ingredient?')">Remove</a>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            
-            <!-- Mobile Cards -->
-            <div class="mobile-ingredients">
-                {% for ing in ingredients %}
-                <div class="ingredient-card">
-                    <div class="ingredient-card-header">
-                        <div class="ingredient-name">{{ ing.item_name }}</div>
-                        <a href="/recipes/{{ recipe.id }}/remove-ingredient/{{ ing.id }}" class="btn btn-danger btn-sm" onclick="return confirm('Remove?')">🗑️</a>
-                    </div>
-                    <div class="ingredient-details">
-                        <div class="detail-item">
-                            <div class="detail-label">Quantity</div>
-                            <div class="detail-value">{{ ing.quantity }} {{ ing.unit }}</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Unit Cost</div>
-                            <div class="detail-value">£{{ "%.2f"|format(ing.unit_cost) }}</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Line Cost</div>
-                            <div class="detail-value cost">£{{ "%.2f"|format(ing.ingredient_cost) }}</div>
-                        </div>
-                        {% if ing.notes %}
-                        <div class="detail-item">
-                            <div class="detail-label">Notes</div>
-                            <div class="detail-value">{{ ing.notes }}</div>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endfor %}
             </div>
             {% else %}
-            <div class="empty-ingredients">
-                <p>No ingredients added yet. Use the form above to add ingredients.</p>
+            <div class="combined-banner empty">
+                <div class="combined-title">✅ No allergens declared on this dish</div>
+                <p style="font-size: 12px; color: #718096; margin-top: 4px;">Make sure ingredient allergens are flagged on the inventory page if you expect to see allergens here.</p>
             </div>
             {% endif %}
+
+            <div class="allergen-section">
+                <div class="allergen-section-title">From ingredients <span class="help">(automatic — flag allergens on inventory items)</span></div>
+                {% if allergen_data.from_ingredients %}
+                <div class="allergen-badges">
+                    {% for code in allergen_data.from_ingredients %}
+                    {% if code in allergen_lookup %}
+                    <span class="allergen-badge"><span class="icon">{{ allergen_lookup[code].icon }}</span>{{ allergen_lookup[code].display_name }}</span>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="allergen-empty">none — your inventory items have no allergen flags</div>
+                {% endif %}
+            </div>
+
+            <div class="allergen-section">
+                <div class="allergen-section-title">From equipment cross-contamination <span class="help">(automatic — flag allergens on equipment below)</span></div>
+                {% if allergen_data.from_equipment %}
+                <div class="allergen-badges">
+                    {% for code in allergen_data.from_equipment %}
+                    {% if code in allergen_lookup %}
+                    <span class="allergen-badge from-equipment"><span class="icon">{{ allergen_lookup[code].icon }}</span>{{ allergen_lookup[code].display_name }}</span>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="allergen-empty">none — link equipment below if cross-contamination applies</div>
+                {% endif %}
+            </div>
+
+            <div class="allergen-section">
+                <div class="allergen-section-title">Manually declared <span class="help">(for hidden allergens not on the ingredient list)</span></div>
+                <form action="/recipes/{{ recipe.id }}/save-manual-allergens" method="POST">
+                    <div class="allergen-grid">
+                        {% for a in all_allergens %}
+                        <label class="allergen-option">
+                            <input type="checkbox" name="allergen_{{ a.code }}" {% if a.code in allergen_data.manual %}checked{% endif %}>
+                            <span>{{ a.icon }} {{ a.display_name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <button type="submit" class="btn btn-sm" style="margin-top: 12px;">Save manual allergens</button>
+                </form>
+            </div>
         </div>
-        
-        {% if recipe.instructions %}
-        <div class="section">
-            <h2>📝 Instructions</h2>
-            <p style="line-height: 1.6; white-space: pre-line; color: #cbd5e0;">{{ recipe.instructions }}</p>
+
+        <!-- INGREDIENTS -->
+        <div class="card">
+            <h2>Ingredients</h2>
+            {% if ingredients %}
+            {% for ing in ingredients %}
+            <div class="ingredient-row">
+                <div>
+                    <div class="ingredient-name">{{ ing.item_name }}</div>
+                    <div class="ingredient-meta">{{ "%.2f"|format(ing.quantity) }} {{ ing.unit }} @ £{{ "%.2f"|format(ing.unit_cost) }}</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="ingredient-cost">£{{ "%.2f"|format(ing.ingredient_cost) }}</span>
+                    <a href="/recipes/{{ recipe.id }}/remove-ingredient/{{ ing.id }}" class="btn btn-sm btn-danger">×</a>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p class="empty">No ingredients yet. Add some below.</p>
+            {% endif %}
+
+            <form action="/recipes/{{ recipe.id }}/add-ingredient" method="POST" style="margin-top: 18px;">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Ingredient</label>
+                        <select name="item_id" required>
+                            <option value="">-- Select an item --</option>
+                            {% for it in all_items %}
+                            <option value="{{ it.id }}">{{ it.name }} ({{ it.unit }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Quantity</label>
+                        <input type="number" name="quantity" step="0.001" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-sm" style="margin-top: 12px;">+ Add ingredient</button>
+            </form>
         </div>
-        {% endif %}
-        
-        {% if recipe.notes %}
-        <div class="section">
-            <h2>📌 Notes</h2>
-            <p style="line-height: 1.6; white-space: pre-line; color: #cbd5e0;">{{ recipe.notes }}</p>
+
+        <!-- EQUIPMENT LINKED TO RECIPE -->
+        <div class="card">
+            <h2>Equipment used <span class="subtle">— for cross-contamination warnings</span></h2>
+            {% if linked_equipment %}
+            {% for eq in linked_equipment %}
+            <div class="equipment-row">
+                <div>
+                    <div class="equipment-name">{{ eq.name }}</div>
+                    <div class="equipment-meta">{{ eq.equipment_type }}</div>
+                </div>
+                <form action="/recipes/{{ recipe.id }}/unlink-equipment/{{ eq.id }}" method="POST" style="margin: 0;">
+                    <button type="submit" class="btn btn-sm btn-danger">Unlink</button>
+                </form>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p class="empty">No equipment linked. Link equipment if cross-contamination might apply (shared fryer, slicer, etc.).</p>
+            {% endif %}
+
+            <form action="/recipes/{{ recipe.id }}/link-equipment" method="POST" style="margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap;">
+                <select name="equipment_id" required style="flex: 1; min-width: 200px;">
+                    <option value="">-- Pick equipment to link --</option>
+                    {% for eq in all_equipment %}
+                    {% set already = false %}
+                    {% for le in linked_equipment %}{% if le.id == eq.id %}{% set already = true %}{% endif %}{% endfor %}
+                    {% if not already %}
+                    <option value="{{ eq.id }}">{{ eq.name }} ({{ eq.equipment_type }})</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-sm">+ Link</button>
+            </form>
         </div>
-        {% endif %}
     </div>
-    
+
     <script>
-        function toggleMenu() {
-            document.getElementById('mobileMenu').classList.toggle('active');
-        }
-        document.addEventListener('click', function(event) {
-            const menu = document.getElementById('mobileMenu');
-            const hamburger = document.querySelector('.hamburger');
-            if (!menu.contains(event.target) && !hamburger.contains(event.target)) {
-                menu.classList.remove('active');
-            }
-        });
+        function toggleMenu() { document.getElementById('mobileMenu').classList.toggle('active'); }
     </script>
 </body>
 </html>
