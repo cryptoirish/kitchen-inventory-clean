@@ -43,6 +43,8 @@
         .alert-detail { font-size: 12px; color: #718096; margin-top: 3px; }
         .alert-action { color: #27ae60; text-decoration: none; font-size: 13px; font-weight: 600; flex-shrink: 0; padding-top: 2px; white-space: nowrap; }
         .alert-action:hover { text-decoration: underline; }
+        .alert-resolve-btn { background: #27ae60; color: #fff; border: none; padding: 6px 12px; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+        .alert-resolve-btn:hover { background: #219a52; }
         .empty-message { text-align: center; padding: 20px; color: #718096; font-size: 14px; }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #edf2f7; font-size: 14px; }
@@ -57,6 +59,17 @@
         .summary-num.inventory { color: #8b5cf6; }
         .summary-num.ok { color: #27ae60; }
         .summary-label { font-size: 11px; color: #718096; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: #fff; border-radius: 10px; padding: 25px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; }
+        .modal h3 { margin-bottom: 8px; font-size: 18px; }
+        .modal p.modal-context { font-size: 13px; color: #718096; margin-bottom: 15px; }
+        .modal label { font-size: 13px; font-weight: 500; color: #4a5568; display: block; margin-bottom: 5px; }
+        .modal textarea { width: 100%; padding: 10px 12px; border: 1px solid #e1e4e8; border-radius: 6px; font-size: 14px; font-family: inherit; }
+        .modal textarea:focus { outline: none; border-color: #27ae60; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .btn { background: #27ae60; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; }
+        .btn-secondary { background: #718096; }
         @media (max-width: 768px) {
             .nav-links { display: none; }
             .hamburger { display: flex; }
@@ -89,6 +102,12 @@
             <h1>⚠️ Alerts</h1>
             <p class="page-subtitle">Compliance and inventory issues that need your attention</p>
         </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div style="background: {% if category == 'success' %}#d4edda{% else %}#f8d7da{% endif %}; color: {% if category == 'success' %}#155724{% else %}#721c24{% endif %}; padding: 12px 16px; border-radius: 6px; margin-bottom: 15px; font-size: 14px;">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
 
         {% set total_haccp = (haccp_alerts.critical|length) + (haccp_alerts.warning|length) + (haccp_alerts.info|length) %}
         <div class="summary-strip">
@@ -126,7 +145,11 @@
                     <div class="alert-title">{{ a.title }}</div>
                     <div class="alert-detail">{{ a.detail }}</div>
                 </div>
-                <a href="{{ a.link }}" class="alert-action">Resolve →</a>
+                {% if a.resolvable_id %}
+                <button class="alert-resolve-btn" onclick='openResolveModal({{ a.resolvable_id }}, {{ a.detail|tojson }})'>Resolve</button>
+                {% else %}
+                <a href="{{ a.link }}" class="alert-action">Fix →</a>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
@@ -192,8 +215,36 @@
         {% endif %}
     </div>
 
+    <!-- Resolve Alert Modal -->
+    <div class="modal-overlay" id="resolveModal">
+        <div class="modal">
+            <h3>Resolve Failed Temperature</h3>
+            <p class="modal-context" id="resolveContext"></p>
+            <p class="modal-context" style="background: #fef3c7; color: #78350f; padding: 10px; border-radius: 6px;">
+                <strong>HACCP requirement:</strong> A corrective action must be recorded for every failed temperature reading. This note becomes part of the permanent audit trail.
+            </p>
+            <form id="resolveForm" method="POST">
+                <label>Corrective action taken *</label>
+                <textarea name="corrective_action" rows="3" required placeholder="e.g. Equipment limits were set incorrectly during initial setup, recalibrated and verified 25 Apr"></textarea>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn">Record &amp; Resolve</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         function toggleMenu() { document.getElementById('mobileMenu').classList.toggle('active'); }
+        function openResolveModal(id, context) {
+            document.getElementById('resolveForm').action = '/haccp/temperature/resolve/' + id;
+            document.getElementById('resolveContext').textContent = context;
+            document.getElementById('resolveModal').classList.add('active');
+        }
+        function closeModal() { document.getElementById('resolveModal').classList.remove('active'); }
+        document.getElementById('resolveModal').addEventListener('click', e => {
+            if (e.target.id === 'resolveModal') closeModal();
+        });
     </script>
 </body>
 </html>
