@@ -135,6 +135,44 @@
             </div>
         </div>
 
+        <!-- PPDS LABEL PANEL -->
+        <div class="card" style="border-left: 5px solid #3b82f6;">
+            <h2>🏷️ PPDS Label <span class="subtle">— Pre-Packed for Direct Sale (Natasha's Law)</span></h2>
+            <form action="/recipes/{{ recipe.id }}/ppds-settings" method="POST" style="margin-bottom: 14px;">
+                <label class="allergen-option" style="margin-bottom: 12px; display: inline-flex; padding: 10px 14px;">
+                    <input type="checkbox" name="is_ppds" {% if recipe.is_ppds %}checked{% endif %}>
+                    <span><strong>This is a PPDS food</strong> — needs a label with allergens declared</span>
+                </label>
+                <div class="form-grid" style="margin-top: 8px;">
+                    <div class="form-group">
+                        <label>Storage instructions <span style="color: #a0aec0; font-weight: 400;">(default: refrigerated below 5°C)</span></label>
+                        <input type="text" name="ppds_storage_instructions" value="{{ recipe.ppds_storage_instructions or '' }}" placeholder="e.g. Keep refrigerated below 5°C">
+                    </div>
+                    <div class="form-group">
+                        <label>Use-by days <span style="color: #a0aec0; font-weight: 400;">(from production)</span></label>
+                        <input type="number" name="ppds_use_by_days" value="{{ recipe.ppds_use_by_days or '' }}" min="1" max="30" placeholder="e.g. 3">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-sm" style="margin-top: 12px;">Save PPDS settings</button>
+            </form>
+
+            {% if recipe.is_ppds %}
+            <div style="background: #ebf8ff; padding: 14px; border-radius: 8px;">
+                <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Print PPDS label:</div>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <a href="/recipes/{{ recipe.id }}/ppds-label.pdf?size=a6" target="_blank" class="btn btn-sm">A6 (105×148mm)</a>
+                    <a href="/recipes/{{ recipe.id }}/ppds-label.pdf?size=a7" target="_blank" class="btn btn-sm">A7 (74×105mm — sandwich wrap)</a>
+                    <a href="/recipes/{{ recipe.id }}/ppds-label.pdf?size=thermal" target="_blank" class="btn btn-sm">Thermal (62mm wide)</a>
+                </div>
+                <p style="font-size: 12px; color: #4a5568; margin-top: 10px;">
+                    Statutory allergens are <b><u>bold + underlined</u></b> per Natasha's Law. The QR code links to a public-facing allergen page.
+                </p>
+            </div>
+            {% else %}
+            <p style="font-size: 13px; color: #a0aec0; font-style: italic;">Tick "This is a PPDS food" above to enable label printing.</p>
+            {% endif %}
+        </div>
+
         <!-- ALLERGEN PANEL -->
         <div class="card allergen-card {% if allergen_data.combined %}has-warning{% else %}all-clear{% endif %}">
             <h2>⚠️ Allergens <span class="subtle">— what would print on a PPDS label</span></h2>
