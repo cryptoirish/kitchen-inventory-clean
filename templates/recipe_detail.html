@@ -74,6 +74,11 @@
         .flash.danger { background: #f8d7da; color: #721c24; }
         .empty { color: #a0aec0; font-style: italic; padding: 14px 0; }
         .hidden { display: none; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: #fff; border-radius: 10px; padding: 25px; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; }
+        .modal h3 { margin-bottom: 8px; font-size: 18px; }
+        .modal-context { font-size: 13px; color: #718096; margin-bottom: 15px; }
         .allergen-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 8px; }
         .allergen-option { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid #e1e4e8; border-radius: 6px; cursor: pointer; font-size: 13px; }
         .allergen-option:has(input:checked) { border-color: #f59e0b; background: #fffbeb; }
@@ -317,8 +322,58 @@
                         <input type="number" name="quantity" step="0.001" required>
                     </div>
                 </div>
-                <button type="submit" class="btn btn-sm" style="margin-top: 12px;">+ Add ingredient</button>
+                <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button type="submit" class="btn btn-sm">+ Add ingredient</button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('createIngredientModal').classList.add('active')">+ Create new ingredient</button>
+                </div>
             </form>
+        </div>
+
+        <!-- Create New Ingredient Modal -->
+        <div class="modal-overlay" id="createIngredientModal">
+            <div class="modal">
+                <h3>+ Create new ingredient</h3>
+                <p class="modal-context">This will create a new item in your inventory and add it to this recipe in one go.</p>
+                <form action="/recipes/{{ recipe.id }}/create-and-add-ingredient" method="POST">
+                    <div class="form-grid">
+                        <div class="form-group full">
+                            <label>Ingredient name *</label>
+                            <input type="text" name="name" required placeholder="e.g. Sourdough flour">
+                        </div>
+                        <div class="form-group">
+                            <label>Unit *</label>
+                            <input type="text" name="unit" required placeholder="kg, L, units">
+                        </div>
+                        <div class="form-group">
+                            <label>Quantity for this recipe *</label>
+                            <input type="number" name="quantity" step="0.001" required placeholder="e.g. 0.5">
+                        </div>
+                        <div class="form-group">
+                            <label>Cost per unit (£)</label>
+                            <input type="number" name="cost" step="0.01" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label>Category</label>
+                            <input type="text" name="category" placeholder="e.g. Dry goods">
+                        </div>
+                    </div>
+                    <div style="margin-top: 16px;">
+                        <label style="font-size: 13px; font-weight: 600; color: #4a5568; display: block; margin-bottom: 8px;">Allergens (tick any that apply)</label>
+                        <div class="allergen-grid">
+                            {% for a in all_allergens %}
+                            <label class="allergen-option">
+                                <input type="checkbox" name="allergen_{{ a.code }}">
+                                <span>{{ a.icon }} {{ a.display_name }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="modal-actions" style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('createIngredientModal').classList.remove('active')">Cancel</button>
+                        <button type="submit" class="btn">Create &amp; Add</button>
+                    </div>
+                </form>
+            </div>
         </div>
 
         <!-- EQUIPMENT LINKED TO RECIPE -->
@@ -358,6 +413,9 @@
 
     <script>
         function toggleMenu() { document.getElementById('mobileMenu').classList.toggle('active'); }
+        document.querySelectorAll('.modal-overlay').forEach(m => {
+            m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
+        });
     </script>
 </body>
 </html>
