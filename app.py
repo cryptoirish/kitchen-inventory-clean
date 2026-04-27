@@ -688,6 +688,93 @@ def add_recipe():
             flash('Error creating recipe', 'danger')
     return render_template('add_recipe.html')
 
+
+@app.route('/recipes/<int:id>/quick-edit', methods=['POST'])
+@login_required
+def quick_edit_recipe(id):
+    """Inline edit of common recipe fields from the detail page."""
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE recipes
+            SET name = %s, category = %s, selling_price = %s,
+                portion_size = %s, servings = %s, updated_at = %s
+            WHERE id = %s AND organization_id = %s
+        ''', (
+            request.form['name'],
+            request.form.get('category', ''),
+            float(request.form['selling_price']) if request.form.get('selling_price') else 0,
+            request.form.get('portion_size', ''),
+            int(request.form['servings']) if request.form.get('servings') else 1,
+            datetime.now(),
+            id,
+            org_id
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Recipe updated.', 'success')
+        return redirect(f'/recipes/{id}')
+    except Exception as e:
+        print(f"Quick edit recipe error: {e}")
+        traceback.print_exc()
+        flash('Error updating recipe', 'danger')
+        return redirect(f'/recipes/{id}')
+
+
+@app.route('/recipes/<int:id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_recipe(id):
+    """Full edit page — all recipe fields including instructions and notes."""
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+
+        if request.method == 'POST':
+            cur.execute('''
+                UPDATE recipes
+                SET name = %s, category = %s, selling_price = %s,
+                    portion_size = %s, servings = %s,
+                    instructions = %s, notes = %s, updated_at = %s
+                WHERE id = %s AND organization_id = %s
+            ''', (
+                request.form['name'],
+                request.form.get('category', ''),
+                float(request.form['selling_price']) if request.form.get('selling_price') else 0,
+                request.form.get('portion_size', ''),
+                int(request.form['servings']) if request.form.get('servings') else 1,
+                request.form.get('instructions', ''),
+                request.form.get('notes', ''),
+                datetime.now(),
+                id,
+                org_id
+            ))
+            conn.commit()
+            cur.close()
+            conn.close()
+            flash('Recipe updated.', 'success')
+            return redirect(f'/recipes/{id}')
+
+        cur.execute('SELECT * FROM recipes WHERE id = %s AND organization_id = %s', (id, org_id))
+        recipe = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not recipe:
+            flash('Recipe not found', 'danger')
+            return redirect('/recipes')
+
+        return render_template('edit_recipe.html', recipe=recipe)
+    except Exception as e:
+        print(f"Edit recipe error: {e}")
+        traceback.print_exc()
+        flash('Error loading recipe', 'danger')
+        return redirect(f'/recipes/{id}')
+
+
 @app.route('/recipes/<int:id>')
 @login_required
 def recipe_detail(id):
