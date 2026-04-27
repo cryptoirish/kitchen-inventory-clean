@@ -4,3 +4,4 @@ gunicorn==21.2.0
 werkzeug==3.0.1
 stripe==7.10.0
 reportlab==4.2.5
+qrcode[pil]
