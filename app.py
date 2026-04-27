@@ -848,6 +848,59 @@ def recipe_detail(id):
         traceback.print_exc()
         return redirect('/recipes')
 
+@app.route('/recipes/<int:recipe_id>/create-and-add-ingredient', methods=['POST'])
+@login_required
+def create_and_add_ingredient(recipe_id):
+    """Create a new inventory item and immediately add it to the recipe."""
+    try:
+        org_id = get_current_org_id()
+        # Verify recipe belongs to this org
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT id FROM recipes WHERE id = %s AND organization_id = %s', (recipe_id, org_id))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            flash('Recipe not found', 'danger')
+            return redirect('/recipes')
+
+        # Create the inventory item
+        allergen_codes = parse_allergen_codes(request.form)
+        cur.execute('''
+            INSERT INTO items (organization_id, name, category, stock, reorder_point, cost, unit, allergens, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+            RETURNING id
+        ''', (
+            org_id,
+            request.form['name'].strip(),
+            request.form.get('category', '').strip() or None,
+            0,  # stock starts at 0
+            0,  # reorder point starts at 0
+            float(request.form['cost']) if request.form.get('cost') else 0,
+            request.form['unit'].strip(),
+            json.dumps(allergen_codes),
+            datetime.now()
+        ))
+        new_item_id = cur.fetchone()['id']
+
+        # Add it to the recipe
+        cur.execute('''
+            INSERT INTO recipe_ingredients (recipe_id, inventory_item_id, quantity, notes)
+            VALUES (%s, %s, %s, %s)
+        ''', (recipe_id, new_item_id, request.form['quantity'], ''))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash(f"Created '{request.form['name'].strip()}' and added to recipe.", 'success')
+        return redirect(f'/recipes/{recipe_id}')
+    except Exception as e:
+        print(f"Create-and-add ingredient error: {e}")
+        traceback.print_exc()
+        flash('Error creating ingredient', 'danger')
+        return redirect(f'/recipes/{recipe_id}')
+
+
 @app.route('/recipes/<int:recipe_id>/add-ingredient', methods=['POST'])
 @login_required
 def add_ingredient_to_recipe(recipe_id):
