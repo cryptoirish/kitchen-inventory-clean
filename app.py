@@ -13,10 +13,12 @@ import stripe
 from io import BytesIO
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm
+from reportlab.lib.units import cm, mm
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.enums import TA_CENTER
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, KeepTogether, PageBreak
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.pdfgen import canvas
+import qrcode
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -811,6 +813,235 @@ def delete_recipe(id):
         return redirect('/recipes')
     except Exception as e:
         return redirect('/recipes')
+
+
+@app.route('/recipes/<int:id>/ppds-settings', methods=['POST'])
+@login_required
+def save_ppds_settings(id):
+    """Save PPDS-specific fields (is_ppds flag, storage instructions, use-by days)."""
+    try:
+        org_id = get_current_org_id()
+        is_ppds = request.form.get('is_ppds') == 'on'
+        storage = request.form.get('ppds_storage_instructions', '').strip() or None
+        use_by_days_raw = request.form.get('ppds_use_by_days', '').strip()
+        try:
+            use_by_days = int(use_by_days_raw) if use_by_days_raw else None
+        except ValueError:
+            use_by_days = None
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE recipes
+            SET is_ppds = %s, ppds_storage_instructions = %s, ppds_use_by_days = %s, updated_at = %s
+            WHERE id = %s AND organization_id = %s
+        ''', (is_ppds, storage, use_by_days, datetime.now(), id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('PPDS settings saved.', 'success')
+        return redirect(f'/recipes/{id}')
+    except Exception as e:
+        print(f"Save PPDS settings error: {e}")
+        traceback.print_exc()
+        flash('Error saving PPDS settings', 'danger')
+        return redirect(f'/recipes/{id}')
+
+
+# ====== PPDS LABEL GENERATOR ======
+
+def _generate_qr_image(url, box_size=4):
+    """Returns a BytesIO containing a PNG QR code for the URL."""
+    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M,
+                       box_size=box_size, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color='black', back_color='white')
+    buf = BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return buf
+
+
+def _build_ingredient_paragraph(ingredients_with_allergens, allergen_lookup, base_font_size=8):
+    """Builds an HTML-ish ingredient list string for ReportLab Paragraph.
+    Statutory allergens get <b><u>bold underlined</u></b> per Natasha's Law.
+    ingredients_with_allergens = list of (item_name, allergen_codes_list) tuples."""
+    parts = []
+    for name, allergen_codes in ingredients_with_allergens:
+        # If this ingredient has any statutory allergens, emphasise the parts
+        if allergen_codes:
+            # Build display: "Wheat Flour (CONTAINS: gluten)" with bold/underline on the allergen names
+            allergen_display_names = [allergen_lookup[c]['display_name'] for c in allergen_codes if c in allergen_lookup]
+            if allergen_display_names:
+                emphasised = ', '.join(f'<b><u>{n}</u></b>' for n in allergen_display_names)
+                parts.append(f'{name} ({emphasised})')
+            else:
+                parts.append(name)
+        else:
+            parts.append(name)
+    return ', '.join(parts)
+
+
+def _build_ppds_label_story(recipe, ingredients, allergen_data, allergen_lookup, qr_url, label_size, styles):
+    """Returns a list of flowables for one PPDS label.
+    label_size: 'a6', 'a7', or 'thermal' — controls font sizes and layout density."""
+    # Tune sizes per label format
+    if label_size == 'a6':
+        title_size = 14
+        body_size = 9
+        qr_box = 4
+    elif label_size == 'a7':
+        title_size = 11
+        body_size = 7
+        qr_box = 3
+    else:  # thermal
+        title_size = 11
+        body_size = 8
+        qr_box = 3
+
+    # Build ingredient list
+    ingredient_data = []
+    for ing in ingredients:
+        codes = ing.get('allergens') or []
+        if isinstance(codes, str):
+            try:
+                codes = json.loads(codes)
+            except (ValueError, TypeError):
+                codes = []
+        ingredient_data.append((ing['item_name'], codes))
+
+    ingredients_html = _build_ingredient_paragraph(ingredient_data, allergen_lookup, body_size)
+
+    # Combined allergen list
+    contains_html = ''
+    if allergen_data['combined']:
+        names = [allergen_lookup[c]['display_name'] for c in allergen_data['combined'] if c in allergen_lookup]
+        if names:
+            contains_html = '<b><u>CONTAINS: ' + ', '.join(names) + '</u></b>'
+
+    # Storage and use-by
+    storage = recipe.get('ppds_storage_instructions') or 'Keep refrigerated below 5°C'
+    use_by_days = recipe.get('ppds_use_by_days')
+    use_by_text = f'USE BY: ____________  (within {use_by_days} day{"s" if use_by_days != 1 else ""} of production)' if use_by_days else 'USE BY: ____________'
+
+    # Build paragraph styles for this size
+    title_style = ParagraphStyle('PpdsTitle', fontSize=title_size, fontName='Helvetica-Bold', alignment=TA_LEFT, spaceAfter=4)
+    section_label_style = ParagraphStyle('PpdsSectionLabel', fontSize=body_size - 1, fontName='Helvetica-Bold', textColor=colors.HexColor('#4a5568'), spaceAfter=2, spaceBefore=4)
+    body_style = ParagraphStyle('PpdsBody', fontSize=body_size, fontName='Helvetica', leading=body_size + 2, spaceAfter=2)
+    contains_style = ParagraphStyle('PpdsContains', fontSize=body_size, fontName='Helvetica-Bold', textColor=colors.HexColor('#7a1f1a'), leading=body_size + 2, spaceAfter=4, spaceBefore=4)
+    useby_style = ParagraphStyle('PpdsUseBy', fontSize=body_size + 1, fontName='Helvetica-Bold', spaceBefore=4)
+
+    # QR code
+    qr_buf = _generate_qr_image(qr_url, box_size=qr_box)
+    qr_img_size = 2.2*cm if label_size == 'a6' else 1.7*cm
+    qr_img = Image(qr_buf, width=qr_img_size, height=qr_img_size)
+
+    # Compose flowables
+    flow = []
+    flow.append(Paragraph(recipe['name'], title_style))
+    flow.append(Paragraph('INGREDIENTS:', section_label_style))
+    flow.append(Paragraph(ingredients_html or '(no ingredients listed)', body_style))
+    if contains_html:
+        flow.append(Paragraph(contains_html, contains_style))
+    flow.append(Paragraph(f'Storage: {storage}', body_style))
+    flow.append(Paragraph(use_by_text, useby_style))
+
+    # QR code with caption
+    qr_caption = ParagraphStyle('PpdsQrCap', fontSize=body_size - 2, fontName='Helvetica-Oblique', alignment=TA_CENTER, textColor=colors.HexColor('#4a5568'))
+    qr_table = Table([
+        [qr_img],
+        [Paragraph('Scan for full allergen info', qr_caption)],
+    ], colWidths=[qr_img_size])
+    qr_table.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+    ]))
+
+    # On A6 the QR sits to the right of the use-by line
+    # For simplicity we put it at the bottom for all sizes
+    flow.append(Spacer(1, 4))
+    flow.append(qr_table)
+
+    return flow
+
+
+@app.route('/recipes/<int:id>/ppds-label.pdf')
+@login_required
+def ppds_label_pdf(id):
+    """Generate a printable PPDS label for a recipe.
+    Query param: size=a6|a7|thermal (default a6)."""
+    try:
+        org_id = get_current_org_id()
+        size = request.args.get('size', 'a6')
+        if size not in ('a6', 'a7', 'thermal'):
+            size = 'a6'
+
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM recipes WHERE id = %s AND organization_id = %s', (id, org_id))
+        recipe = cur.fetchone()
+        if not recipe:
+            cur.close()
+            conn.close()
+            flash('Recipe not found', 'danger')
+            return redirect('/recipes')
+
+        cur.execute('''
+            SELECT ri.quantity, i.name as item_name, i.unit, i.allergens
+            FROM recipe_ingredients ri
+            JOIN items i ON i.id = ri.inventory_item_id
+            WHERE ri.recipe_id = %s
+            ORDER BY ri.quantity DESC, i.name
+        ''', (id,))
+        ingredients = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        allergen_data = get_recipe_allergens(id, org_id)
+        all_allergens = get_all_allergens()
+        allergen_lookup = {a['code']: a for a in all_allergens}
+
+        # Build the QR URL — points at the public allergen page Phase 5 will build
+        qr_url = request.host_url.rstrip('/') + url_for('public_allergen_page', recipe_id=id)
+
+        # Page setup per size
+        if size == 'a6':
+            page_size = (105*mm, 148*mm)
+            margins = 8*mm
+        elif size == 'a7':
+            page_size = (74*mm, 105*mm)
+            margins = 5*mm
+        else:  # thermal — fixed 62mm wide, height auto-grows but we cap it
+            page_size = (62*mm, 100*mm)
+            margins = 4*mm
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=page_size,
+                              leftMargin=margins, rightMargin=margins,
+                              topMargin=margins, bottomMargin=margins)
+        styles = getSampleStyleSheet()
+        story = _build_ppds_label_story(recipe, ingredients, allergen_data, allergen_lookup, qr_url, size, styles)
+        doc.build(story)
+        buffer.seek(0)
+
+        response = make_response(buffer.read())
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'inline; filename="{recipe["name"].replace(" ", "-")}-PPDS-{size}.pdf"'
+        return response
+    except Exception as e:
+        print(f"PPDS label error: {e}")
+        traceback.print_exc()
+        flash('Error generating label', 'danger')
+        return redirect(f'/recipes/{id}')
+
+
+# Stub for Phase 5 — needs to exist so url_for works in QR generation
+@app.route('/allergen/<int:recipe_id>')
+def public_allergen_page(recipe_id):
+    """Placeholder — Phase 5 builds this out properly with a no-login view."""
+    return f"<h1>Allergen info for recipe {recipe_id}</h1><p>Phase 5 will build this page properly.</p>", 200
 
 
 @app.route('/recipes/<int:recipe_id>/save-manual-allergens', methods=['POST'])
