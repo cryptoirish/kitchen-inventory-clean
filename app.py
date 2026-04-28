@@ -1177,11 +1177,64 @@ def ppds_label_pdf(id):
         return redirect(f'/recipes/{id}')
 
 
-# Stub for Phase 5 — needs to exist so url_for works in QR generation
+# Public allergen page — no login required. This is what the QR code on the printed label scans to.
 @app.route('/allergen/<int:recipe_id>')
 def public_allergen_page(recipe_id):
-    """Placeholder — Phase 5 builds this out properly with a no-login view."""
-    return f"<h1>Allergen info for recipe {recipe_id}</h1><p>Phase 5 will build this page properly.</p>", 200
+    """Public-facing allergen information page — designed for someone with a serious
+    allergy reading on their phone. No login required. Mobile-first."""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM recipes WHERE id = %s', (recipe_id,))
+        recipe = cur.fetchone()
+        if not recipe:
+            cur.close()
+            conn.close()
+            return render_template('public_allergen.html', recipe=None, org=None,
+                                   ingredients=[], allergen_data=None, allergen_lookup={}), 404
+
+        org_id = recipe['organization_id']
+
+        cur.execute('SELECT * FROM organizations WHERE id = %s', (org_id,))
+        org = cur.fetchone()
+
+        cur.execute('''
+            SELECT ri.quantity, i.name as item_name, i.unit, i.allergens
+            FROM recipe_ingredients ri
+            JOIN items i ON i.id = ri.inventory_item_id
+            WHERE ri.recipe_id = %s
+            ORDER BY ri.quantity DESC, i.name
+        ''', (recipe_id,))
+        ingredients = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        # Normalise the per-ingredient allergen JSON for the template
+        for ing in ingredients:
+            raw = ing.get('allergens')
+            if raw is None:
+                ing['allergens_list'] = []
+            elif isinstance(raw, str):
+                try:
+                    ing['allergens_list'] = json.loads(raw)
+                except (ValueError, TypeError):
+                    ing['allergens_list'] = []
+            else:
+                ing['allergens_list'] = list(raw)
+
+        allergen_data = get_recipe_allergens(recipe_id, org_id)
+        all_allergens = get_all_allergens()
+        allergen_lookup = {a['code']: a for a in all_allergens}
+
+        return render_template('public_allergen.html',
+                               recipe=recipe, org=org,
+                               ingredients=ingredients,
+                               allergen_data=allergen_data,
+                               allergen_lookup=allergen_lookup)
+    except Exception as e:
+        print(f"Public allergen page error: {e}")
+        traceback.print_exc()
+        return "Error loading allergen information. Please contact the food business directly.", 500
 
 
 @app.route('/recipes/<int:recipe_id>/save-manual-allergens', methods=['POST'])
@@ -1540,6 +1593,62 @@ def get_compliance_alerts(org_id):
             'title': 'Business details incomplete',
             'detail': 'Add your trading name and FBO registration so PDFs are audit-ready',
             'link': '/settings/business',
+        })
+
+    # 5. PPDS recipes — Natasha's Law compliance checks
+    cur.execute('''
+        SELECT r.id, r.name, r.ppds_storage_instructions, r.ppds_use_by_days,
+               COUNT(ri.id) as ingredient_count
+        FROM recipes r
+        LEFT JOIN recipe_ingredients ri ON ri.recipe_id = r.id
+        WHERE r.organization_id = %s AND r.is_ppds = true
+        GROUP BY r.id, r.name, r.ppds_storage_instructions, r.ppds_use_by_days
+    ''', (org_id,))
+    ppds_recipes = cur.fetchall()
+
+    for rec in ppds_recipes:
+        # Critical: PPDS recipe with no ingredients — cannot legally print a label
+        if rec['ingredient_count'] == 0:
+            alerts['critical'].append({
+                'type': 'ppds_no_ingredients',
+                'severity': 'critical',
+                'title': f"PPDS recipe '{rec['name']}' has no ingredients",
+                'detail': "Cannot print a legally compliant label without an ingredient list",
+                'link': f"/recipes/{rec['id']}",
+            })
+            continue
+        # Warning: missing storage AND use-by
+        if not rec['ppds_storage_instructions'] and not rec['ppds_use_by_days']:
+            alerts['warning'].append({
+                'type': 'ppds_missing_storage',
+                'severity': 'warning',
+                'title': f"'{rec['name']}' missing storage info",
+                'detail': "PPDS labels need storage instructions and a use-by period",
+                'link': f"/recipes/{rec['id']}",
+            })
+
+    # 6. Inventory items used in PPDS recipes that have no allergen flags set —
+    # info-level prompt to verify whether allergens were missed
+    cur.execute('''
+        SELECT DISTINCT i.id, i.name
+        FROM items i
+        JOIN recipe_ingredients ri ON ri.inventory_item_id = i.id
+        JOIN recipes r ON r.id = ri.recipe_id
+        WHERE r.organization_id = %s
+          AND r.is_ppds = true
+          AND (i.allergens IS NULL OR i.allergens = '[]'::jsonb)
+    ''', (org_id,))
+    unflagged_items = cur.fetchall()
+    if unflagged_items:
+        names = ', '.join(item['name'] for item in unflagged_items[:3])
+        if len(unflagged_items) > 3:
+            names += f" + {len(unflagged_items) - 3} more"
+        alerts['info'].append({
+            'type': 'ppds_unflagged_ingredients',
+            'severity': 'info',
+            'title': f"{len(unflagged_items)} PPDS ingredient{'s' if len(unflagged_items) != 1 else ''} have no allergens flagged",
+            'detail': f"Verify allergens on: {names}",
+            'link': '/inventory',
         })
 
     cur.close()
@@ -2174,7 +2283,8 @@ def save_business_settings():
             UPDATE organizations
             SET business_name = %s, business_address = %s, business_phone = %s,
                 business_email = %s, food_business_registration = %s,
-                responsible_person = %s, logo_url = %s
+                responsible_person = %s, logo_url = %s,
+                show_contact_on_public_page = %s, show_fbo_on_public_page = %s
             WHERE id = %s
         ''', (
             request.form.get('business_name', '').strip() or None,
@@ -2184,6 +2294,8 @@ def save_business_settings():
             request.form.get('food_business_registration', '').strip() or None,
             request.form.get('responsible_person', '').strip() or None,
             request.form.get('logo_url', '').strip() or None,
+            request.form.get('show_contact_on_public_page') == 'on',
+            request.form.get('show_fbo_on_public_page') == 'on',
             org_id
         ))
         conn.commit()
@@ -2193,6 +2305,7 @@ def save_business_settings():
         return redirect('/settings/business')
     except Exception as e:
         print(f"Save business settings error: {e}")
+        traceback.print_exc()
         flash('Error saving details', 'danger')
         return redirect('/settings/business')
 
