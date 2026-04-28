@@ -329,9 +329,17 @@ def home():
         
         cur.execute('SELECT COUNT(*) as total_recipes FROM recipes WHERE organization_id = %s', (org_id,))
         total_recipes = cur.fetchone()['total_recipes']
+
+        cur.execute("SELECT COUNT(*) as count FROM haccp_temperature_logs WHERE organization_id = %s AND logged_at >= NOW() - INTERVAL '24 hours'", (org_id,))
+        temps_today = cur.fetchone()['count']
         
         cur.close()
         conn.close()
+
+        # Compliance alert summary for the homepage banner
+        compliance_alerts = get_compliance_alerts(org_id)
+        critical_count = len(compliance_alerts['critical'])
+        warning_count = len(compliance_alerts['warning'])
         
         return render_template('dashboard.html', 
                              org=org,
@@ -339,7 +347,11 @@ def home():
                              total_items=total_items,
                              low_stock_count=low_stock_count,
                              total_value=float(total_value),
-                             total_recipes=total_recipes)
+                             total_recipes=total_recipes,
+                             temps_today=temps_today,
+                             critical_count=critical_count,
+                             warning_count=warning_count,
+                             user_first_name=session.get('user_name', 'there').split(' ')[0])
     except Exception as e:
         print(f"Dashboard error: {e}")
         traceback.print_exc()
@@ -349,7 +361,11 @@ def home():
                              total_items=0,
                              low_stock_count=0,
                              total_value=0,
-                             total_recipes=0)
+                             total_recipes=0,
+                             temps_today=0,
+                             critical_count=0,
+                             warning_count=0,
+                             user_first_name=session.get('user_name', 'there').split(' ')[0])
 
 @app.route('/inventory')
 @login_required
