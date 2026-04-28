@@ -5,6 +5,140 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - YieldGuard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+    <style>
+        /* Dashboard-specific extensions to the design system */
+        .hero-card {
+            background: linear-gradient(135deg, #7CA37B 0%, #4A6B45 100%);
+            border-radius: 14px;
+            padding: 24px;
+            color: #FFFFFF;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 14px rgba(74, 107, 69, 0.18);
+        }
+        .hero-card.has-warning {
+            background: linear-gradient(135deg, #C8946A 0%, #8B5A2B 100%);
+        }
+        .hero-eyebrow {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .hero-eyebrow-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            font-weight: 600;
+            opacity: 0.85;
+        }
+        .hero-chip {
+            background: #7C2D2D;
+            color: #FFFFFF;
+            padding: 2px 9px;
+            border-radius: 12px;
+            font-size: 10px;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+        }
+        .hero-chip.warning { background: #B45309; }
+        .hero-chip.success { background: rgba(255,255,255,0.22); }
+        .hero-headline {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            letter-spacing: -0.5px;
+            line-height: 1.1;
+        }
+        .hero-detail {
+            font-size: 13.5px;
+            opacity: 0.9;
+            margin-bottom: 16px;
+        }
+        .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .hero-btn {
+            background: rgba(255,255,255,0.22);
+            color: #FFFFFF;
+            padding: 8px 14px;
+            border-radius: 7px;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: background 0.15s;
+        }
+        .hero-btn:hover { background: rgba(255,255,255,0.32); color: #FFFFFF; }
+        .hero-btn-ghost {
+            background: transparent;
+            opacity: 0.85;
+        }
+        .hero-btn-ghost:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+
+        /* Tinted stat cards override */
+        .stat-tinted {
+            border: none;
+            padding: 16px;
+            border-radius: 12px;
+        }
+        .stat-tinted .stat-label {
+            text-transform: uppercase;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        .stat-tint-sage { background: #EEF1ED; }
+        .stat-tint-sage .stat-label { color: #2D4128; }
+        .stat-tint-amber { background: #FEF6E7; }
+        .stat-tint-amber .stat-label { color: #78350F; }
+        .stat-tint-blue { background: #E8F0F7; }
+        .stat-tint-blue .stat-label { color: #133E5F; }
+        .stat-tint-maroon { background: #FBEDED; }
+        .stat-tint-maroon .stat-label { color: #5A1F1F; }
+        .stat-tint-neutral { background: #F4F2EC; }
+        .stat-tint-neutral .stat-label { color: #6B6860; }
+
+        /* Module tiles with icon squares */
+        .module-tile {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-radius: 12px;
+            padding: 16px;
+            text-decoration: none;
+            color: #0A0A0A;
+            transition: border-color 0.15s, transform 0.15s;
+        }
+        .module-tile:hover {
+            border-color: #4A6B45;
+            transform: translateY(-1px);
+        }
+        .module-tile-icon {
+            width: 42px;
+            height: 42px;
+            background: #EEF1ED;
+            color: #4A6B45;
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        .module-tile-text { flex: 1; min-width: 0; }
+        .module-tile-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: #0A0A0A;
+            letter-spacing: -0.01em;
+        }
+        .module-tile-desc {
+            font-size: 12.5px;
+            color: #6B6860;
+            line-height: 1.4;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar">
@@ -42,102 +176,121 @@
         {% endwith %}
 
         <div class="page-header">
-            <p class="page-eyebrow">{{ now_string if now_string else 'Today' }}</p>
+            <p class="page-eyebrow">Today</p>
             <h1>Hello {{ user_first_name }}</h1>
             <p class="page-subtitle">Here's what's happening across your kitchen.</p>
         </div>
 
-        <!-- Compliance overview banner -->
+        <!-- HERO COMPLIANCE CARD -->
         {% if critical_count > 0 %}
-        <div class="alert-card">
-            <div class="alert-card-header">
-                <div class="alert-card-title">
-                    <span class="alert-dot"></span>
-                    <span>{{ critical_count }} critical alert{% if critical_count != 1 %}s{% endif %} need action</span>
-                </div>
-                <a href="/alerts" class="alert-card-link">View →</a>
+        <div class="hero-card">
+            <div class="hero-eyebrow">
+                <span class="hero-eyebrow-label">Compliance status</span>
+                <span class="hero-chip">Critical</span>
             </div>
-            <div class="alert-card-detail">Compliance issues that need attention now.</div>
+            <div class="hero-headline">{{ critical_count }} alert{% if critical_count != 1 %}s{% endif %} need action</div>
+            <div class="hero-detail">Failed temperatures or overdue tasks. Resolve to keep your audit trail clean.</div>
+            <div class="hero-actions">
+                <a href="/alerts" class="hero-btn">Resolve now →</a>
+                <a href="/haccp" class="hero-btn hero-btn-ghost">View HACCP</a>
+            </div>
         </div>
         {% elif warning_count > 0 %}
-        <div class="alert-card has-warning">
-            <div class="alert-card-header">
-                <div class="alert-card-title">
-                    <span class="alert-dot warning"></span>
-                    <span>{{ warning_count }} warning{% if warning_count != 1 %}s{% endif %}</span>
-                </div>
-                <a href="/alerts" class="alert-card-link">View →</a>
+        <div class="hero-card has-warning">
+            <div class="hero-eyebrow">
+                <span class="hero-eyebrow-label">Compliance status</span>
+                <span class="hero-chip warning">Warning</span>
             </div>
-            <div class="alert-card-detail">Items overdue or pending review.</div>
+            <div class="hero-headline">{{ warning_count }} item{% if warning_count != 1 %}s{% endif %} pending</div>
+            <div class="hero-detail">Tasks overdue or due soon. Best to clear before they become critical.</div>
+            <div class="hero-actions">
+                <a href="/alerts" class="hero-btn">Review →</a>
+                <a href="/haccp" class="hero-btn hero-btn-ghost">View HACCP</a>
+            </div>
         </div>
         {% else %}
-        <div class="alert-card all-clear">
-            <div class="alert-card-header">
-                <div class="alert-card-title">
-                    <span class="alert-dot success"></span>
-                    <span>All clear</span>
-                </div>
-                <a href="/haccp" class="alert-card-link">HACCP →</a>
+        <div class="hero-card">
+            <div class="hero-eyebrow">
+                <span class="hero-eyebrow-label">Compliance status</span>
+                <span class="hero-chip success">All clear</span>
             </div>
-            <div class="alert-card-detail">No compliance issues right now.</div>
+            <div class="hero-headline">No issues today</div>
+            <div class="hero-detail">All temperatures logged, cleaning on schedule. Keep it up.</div>
+            <div class="hero-actions">
+                <a href="/haccp" class="hero-btn">Open HACCP →</a>
+                <a href="/recipes" class="hero-btn hero-btn-ghost">View recipes</a>
+            </div>
         </div>
         {% endif %}
 
-        <!-- Stats -->
+        <!-- TINTED STAT CARDS -->
         <div class="stat-grid">
-            <div class="stat">
+            <div class="stat stat-tinted stat-tint-sage">
                 <div class="stat-label">Inventory items</div>
                 <div class="stat-value">{{ total_items }}</div>
             </div>
-            <div class="stat">
-                <div class="stat-label">Inventory value</div>
-                <div class="stat-value">£{{ "%.0f"|format(total_value) }}</div>
-            </div>
-            <div class="stat">
+            <div class="stat stat-tinted stat-tint-amber">
                 <div class="stat-label">Low stock</div>
-                <div class="stat-value{% if low_stock_count > 0 %} danger{% endif %}">{{ low_stock_count }}</div>
+                <div class="stat-value">{{ low_stock_count }}</div>
             </div>
-            <div class="stat">
+            <div class="stat stat-tinted stat-tint-blue">
                 <div class="stat-label">Recipes</div>
                 <div class="stat-value">{{ total_recipes }}</div>
             </div>
-            <div class="stat">
+            <div class="stat stat-tinted stat-tint-maroon">
                 <div class="stat-label">Temps today</div>
                 <div class="stat-value">{{ temps_today }}</div>
             </div>
+            <div class="stat stat-tinted stat-tint-neutral">
+                <div class="stat-label">Inventory value</div>
+                <div class="stat-value">£{{ "%.0f"|format(total_value) }}</div>
+            </div>
         </div>
 
-        <!-- Modules -->
-        <div class="module-grid">
-            <a href="/haccp" class="module-card">
-                <span class="module-card-icon">🛡️</span>
-                <div class="module-card-title">HACCP</div>
-                <div class="module-card-desc">Temperatures, cleaning, deliveries, audit reports</div>
+        <!-- MODULE TILES -->
+        <h2 style="font-size: 13px; font-weight: 600; color: #6B6860; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; margin-top: 8px;">Modules</h2>
+        <div class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
+            <a href="/haccp" class="module-tile">
+                <div class="module-tile-icon">🛡️</div>
+                <div class="module-tile-text">
+                    <div class="module-tile-title">HACCP</div>
+                    <div class="module-tile-desc">Temperatures, cleaning, audit reports</div>
+                </div>
             </a>
-            <a href="/recipes" class="module-card">
-                <span class="module-card-icon">🍽️</span>
-                <div class="module-card-title">Recipes</div>
-                <div class="module-card-desc">Recipe costing, allergens, PPDS labels</div>
+            <a href="/recipes" class="module-tile">
+                <div class="module-tile-icon">🍽️</div>
+                <div class="module-tile-text">
+                    <div class="module-tile-title">Recipes</div>
+                    <div class="module-tile-desc">Costing, allergens, PPDS labels</div>
+                </div>
             </a>
-            <a href="/inventory" class="module-card">
-                <span class="module-card-icon">📦</span>
-                <div class="module-card-title">Inventory</div>
-                <div class="module-card-desc">Stock items, reorder alerts, allergen profiles</div>
+            <a href="/inventory" class="module-tile">
+                <div class="module-tile-icon">📦</div>
+                <div class="module-tile-text">
+                    <div class="module-tile-title">Inventory</div>
+                    <div class="module-tile-desc">Stock items and allergen profiles</div>
+                </div>
             </a>
-            <a href="/alerts" class="module-card">
-                <span class="module-card-icon">⚠️</span>
-                <div class="module-card-title">Alerts</div>
-                <div class="module-card-desc">Compliance and inventory issues</div>
+            <a href="/alerts" class="module-tile">
+                <div class="module-tile-icon">⚠️</div>
+                <div class="module-tile-text">
+                    <div class="module-tile-title">Alerts</div>
+                    <div class="module-tile-desc">All compliance and stock issues</div>
+                </div>
             </a>
-            <a href="/settings/business" class="module-card">
-                <span class="module-card-icon">🏢</span>
-                <div class="module-card-title">Business settings</div>
-                <div class="module-card-desc">Trading details, FBO registration, public page</div>
+            <a href="/settings/business" class="module-tile">
+                <div class="module-tile-icon">🏢</div>
+                <div class="module-tile-text">
+                    <div class="module-tile-title">Business settings</div>
+                    <div class="module-tile-desc">Trading details, FBO registration</div>
+                </div>
             </a>
-            <a href="/billing" class="module-card">
-                <span class="module-card-icon">💳</span>
-                <div class="module-card-title">Billing</div>
-                <div class="module-card-desc">Subscription and plan</div>
+            <a href="/billing" class="module-tile">
+                <div class="module-tile-icon">💳</div>
+                <div class="module-tile-text">
+                    <div class="module-tile-title">Billing</div>
+                    <div class="module-tile-desc">Subscription and plan</div>
+                </div>
             </a>
         </div>
     </div>
