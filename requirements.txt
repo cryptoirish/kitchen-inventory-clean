@@ -1,7 +1,9 @@
-flask==3.0.0
-psycopg[binary]==3.3.3
-gunicorn==21.2.0
-werkzeug==3.0.1
-stripe==7.10.0
-reportlab==4.2.5
+flask
+psycopg[binary]
+gunicorn
+python-dotenv
+werkzeug
+reportlab
 qrcode[pil]
+stripe
+resend
