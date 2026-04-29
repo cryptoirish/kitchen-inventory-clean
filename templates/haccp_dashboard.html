@@ -4,281 +4,378 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HACCP - YieldGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f6fa; color: #2c3e50; }
-        .navbar { background: #fff; border-bottom: 1px solid #e1e4e8; padding: 0 20px; position: sticky; top: 0; z-index: 100; }
-        .nav-container { max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 64px; }
-        .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #2c3e50; font-weight: 700; font-size: 20px; }
-        .logo-icon { font-size: 28px; }
-        .nav-links { display: flex; gap: 24px; }
-        .nav-links a { text-decoration: none; color: #4a5568; font-weight: 500; font-size: 14px; }
-        .nav-links a:hover { color: #27ae60; }
-        .hamburger { display: none; background: none; border: none; cursor: pointer; flex-direction: column; gap: 4px; }
-        .hamburger span { display: block; width: 24px; height: 2px; background: #2c3e50; }
-        .mobile-menu { display: none; position: absolute; top: 64px; left: 0; right: 0; background: #fff; border-bottom: 1px solid #e1e4e8; padding: 10px 0; }
-        .mobile-menu.active { display: block; }
-        .mobile-menu a { display: block; padding: 12px 20px; text-decoration: none; color: #4a5568; }
-        .mobile-menu a.active { color: #27ae60; font-weight: 600; }
-        .container { max-width: 1400px; margin: 0 auto; padding: 30px 20px; }
-        .page-header { margin-bottom: 30px; }
-        .page-header h1 { font-size: 28px; margin-bottom: 6px; }
-        .page-subtitle { color: #718096; font-size: 14px; }
-        .alerts-banner { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 18px 22px; margin-bottom: 25px; border-left: 5px solid #e1e4e8; }
-        .alerts-banner.has-critical { border-left-color: #e74c3c; }
-        .alerts-banner.has-warning { border-left-color: #f59e0b; }
-        .alerts-banner.all-clear { border-left-color: #27ae60; }
-        .alerts-banner h2 { font-size: 15px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
-        .alert-summary { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
-        .alert-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: 600; }
-        .alert-pill.critical { background: #fee2e2; color: #991b1b; }
-        .alert-pill.warning { background: #fef3c7; color: #78350f; }
-        .alert-pill.info { background: #dbeafe; color: #1e40af; }
-        .alert-list { margin-top: 10px; }
-        .alert-item { padding: 10px 0; border-top: 1px solid #edf2f7; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-        .alert-item:first-child { border-top: none; padding-top: 0; }
-        .alert-item-icon { font-size: 16px; flex-shrink: 0; }
-        .alert-item-body { flex: 1; min-width: 0; }
-        .alert-item-title { font-size: 14px; font-weight: 600; }
-        .alert-item-detail { font-size: 12px; color: #718096; margin-top: 2px; }
-        .alert-item-actions { display: flex; gap: 6px; flex-shrink: 0; padding-top: 2px; }
-        .alert-item-link { color: #27ae60; text-decoration: none; font-size: 12px; font-weight: 600; }
-        .alert-resolve-btn { background: #27ae60; color: #fff; border: none; padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; }
-        .alert-resolve-btn:hover { background: #219a52; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 30px; }
-        .stat-card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .stat-icon { font-size: 28px; margin-bottom: 8px; }
-        .stat-number { font-size: 32px; font-weight: 700; color: #2c3e50; line-height: 1; margin-bottom: 6px; }
-        .stat-number.stat-warning { color: #e74c3c; }
-        .stat-label { font-size: 13px; color: #718096; }
-        .modules-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 15px; margin-bottom: 30px; }
-        .module-card { background: #fff; border: 2px solid #e1e4e8; border-radius: 10px; padding: 22px; text-decoration: none; color: #2c3e50; transition: all 0.15s; }
-        .module-card:hover { border-color: #27ae60; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(39, 174, 96, 0.1); }
-        .module-card.feature { border-color: #27ae60; background: #f0fdf4; }
-        .module-card.feature:hover { background: #dcfce7; }
-        .module-icon { font-size: 32px; margin-bottom: 10px; }
-        .module-title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
-        .module-description { font-size: 13px; color: #718096; line-height: 1.4; }
-        .recent-section { background: #fff; border-radius: 10px; padding: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .recent-section h2 { font-size: 18px; margin-bottom: 18px; }
-        .log-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #edf2f7; }
-        .log-item:last-child { border-bottom: none; }
-        .log-equipment { font-weight: 600; font-size: 14px; }
-        .log-meta { font-size: 12px; color: #718096; margin-top: 2px; }
-        .log-temp { font-weight: 700; font-size: 16px; padding: 6px 12px; border-radius: 6px; }
-        .log-temp.pass { background: #d4edda; color: #155724; }
-        .log-temp.fail { background: #f8d7da; color: #721c24; }
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
-        .modal-overlay.active { display: flex; }
-        .modal { background: #fff; border-radius: 10px; padding: 25px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; }
-        .modal h3 { margin-bottom: 8px; font-size: 18px; }
-        .modal p.modal-context { font-size: 13px; color: #718096; margin-bottom: 15px; }
-        .modal label { font-size: 13px; font-weight: 500; color: #4a5568; display: block; margin-bottom: 5px; }
-        .modal textarea { width: 100%; padding: 10px 12px; border: 1px solid #e1e4e8; border-radius: 6px; font-size: 14px; font-family: inherit; }
-        .modal textarea:focus { outline: none; border-color: #27ae60; }
-        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
-        .btn { background: #27ae60; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; }
-        .btn-secondary { background: #718096; }
-        @media (max-width: 768px) {
-            .nav-links { display: none; }
-            .hamburger { display: flex; }
-            .page-header h1 { font-size: 22px; }
-            .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-            .stat-card { padding: 15px; }
-            .stat-number { font-size: 24px; }
-            .alert-item { flex-direction: column; align-items: stretch; gap: 6px; }
+        /* HACCP-specific styles, layered on top of design.css */
+        .hero-card {
+            background: linear-gradient(135deg, #7CA37B 0%, #4A6B45 100%);
+            border-radius: 14px;
+            padding: 24px;
+            color: #FFFFFF;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 14px rgba(74, 107, 69, 0.18);
         }
+        .hero-eyebrow {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .hero-eyebrow-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            font-weight: 600;
+            opacity: 0.85;
+        }
+        .hero-chip {
+            background: #7C2D2D;
+            color: #FFFFFF;
+            padding: 2px 9px;
+            border-radius: 12px;
+            font-size: 10px;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+        }
+        .hero-chip.warning { background: #B45309; }
+        .hero-chip.success { background: rgba(255,255,255,0.22); }
+        .hero-headline {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            letter-spacing: -0.5px;
+            line-height: 1.1;
+        }
+        .hero-detail {
+            font-size: 13.5px;
+            opacity: 0.9;
+            margin-bottom: 16px;
+        }
+        .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .hero-btn {
+            background: rgba(255,255,255,0.22);
+            color: #FFFFFF;
+            padding: 8px 14px;
+            border-radius: 7px;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: background 0.15s;
+        }
+        .hero-btn:hover { background: rgba(255,255,255,0.32); color: #FFFFFF; }
+        .hero-btn-ghost { background: transparent; opacity: 0.85; }
+        .hero-btn-ghost:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+
+        /* Tinted stat cards */
+        .stat-tinted {
+            border: none;
+            padding: 16px;
+            border-radius: 12px;
+        }
+        .stat-tinted .stat-label {
+            text-transform: uppercase;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        .stat-tint-sage { background: #EEF1ED; }
+        .stat-tint-sage .stat-label { color: #2D4128; }
+        .stat-tint-amber { background: #FEF6E7; }
+        .stat-tint-amber .stat-label { color: #78350F; }
+        .stat-tint-blue { background: #E8F0F7; }
+        .stat-tint-blue .stat-label { color: #133E5F; }
+        .stat-tint-maroon { background: #FBEDED; }
+        .stat-tint-maroon .stat-label { color: #5A1F1F; }
+        .stat-tint-neutral { background: #F4F2EC; }
+        .stat-tint-neutral .stat-label { color: #6B6860; }
+
+        /* Module tiles for HACCP sub-areas */
+        .module-tile {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-radius: 12px;
+            padding: 16px;
+            text-decoration: none;
+            color: #0A0A0A;
+            transition: border-color 0.15s, transform 0.15s;
+        }
+        .module-tile:hover {
+            border-color: #4A6B45;
+            transform: translateY(-1px);
+        }
+        .module-tile-icon {
+            width: 42px;
+            height: 42px;
+            background: #EEF1ED;
+            color: #4A6B45;
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        .module-tile-text { flex: 1; min-width: 0; }
+        .module-tile-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: #0A0A0A;
+            letter-spacing: -0.01em;
+        }
+        .module-tile-desc {
+            font-size: 12.5px;
+            color: #6B6860;
+            line-height: 1.4;
+        }
+
+        .section-heading {
+            font-size: 12px;
+            font-weight: 600;
+            color: #6B6860;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 28px 0 12px;
+        }
+
+        /* Recent temps list */
+        .temp-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 16px;
+            border-bottom: 1px solid #F0EEE7;
+        }
+        .temp-row:last-child { border-bottom: none; }
+        .temp-row-body { flex: 1; min-width: 0; }
+        .temp-row-name { font-weight: 600; font-size: 14px; color: #0A0A0A; }
+        .temp-row-meta { font-size: 12.5px; color: #6B6860; margin-top: 2px; }
+        .temp-reading {
+            font-size: 17px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.5px;
+        }
+        .temp-status {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 3px 9px;
+            border-radius: 12px;
+            white-space: nowrap;
+        }
+        .temp-status.pass { background: #EEF1ED; color: #2D4128; }
+        .temp-status.fail { background: #FBEDED; color: #5A1F1F; }
+        .temp-status.warning { background: #FEF6E7; color: #78350F; }
+        .temp-status.voided { background: #F4F2EC; color: #6B6860; text-decoration: line-through; }
+
+        .empty-list {
+            padding: 32px 16px;
+            text-align: center;
+            color: #9C988D;
+            font-size: 13.5px;
+        }
+        .empty-list a { color: #4A6B45; font-weight: 500; }
     </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <a href="/" class="logo"><div class="logo-icon">🍳</div><div class="logo-text">YieldGuard</div></a>
+            <a href="/" class="logo"><span class="logo-icon">🍳</span><span>YieldGuard</span></a>
             <div class="nav-links">
-                <a href="/">Dashboard</a><a href="/inventory">Inventory</a><a href="/recipes">Recipes</a>
-                <a href="/haccp" style="color: #27ae60;">HACCP</a><a href="/alerts">Alerts</a>
-                <a href="/billing">Billing</a><a href="/logout">Logout</a>
+                <a href="/">Dashboard</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/recipes">Recipes</a>
+                <a href="/haccp" class="active">HACCP</a>
+                <a href="/alerts">Alerts</a>
+                <a href="/billing">Billing</a>
+                <a href="/logout">Logout</a>
             </div>
-            <button class="hamburger" onclick="toggleMenu()"><span></span><span></span><span></span></button>
+            <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
         </div>
         <div class="mobile-menu" id="mobileMenu">
-            <a href="/">📊 Dashboard</a><a href="/inventory">📦 Inventory</a><a href="/recipes">🍽️ Recipes</a>
-            <a href="/haccp" class="active">🛡️ HACCP</a><a href="/alerts">⚠️ Alerts</a>
-            <a href="/billing">💳 Billing</a><a href="/logout">🚪 Logout</a>
+            <a href="/">Dashboard</a>
+            <a href="/inventory">Inventory</a>
+            <a href="/recipes">Recipes</a>
+            <a href="/haccp" class="active">HACCP</a>
+            <a href="/alerts">Alerts</a>
+            <a href="/billing">Billing</a>
+            <a href="/logout">Logout</a>
         </div>
     </nav>
 
     <div class="container">
-        <div class="page-header">
-            <h1>🛡️ HACCP Compliance</h1>
-            <p class="page-subtitle">Food safety management and compliance tracking</p>
-        </div>
-
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for category, message in messages %}
-                <div style="background: {% if category == 'success' %}#d4edda{% else %}#f8d7da{% endif %}; color: {% if category == 'success' %}#155724{% else %}#721c24{% endif %}; padding: 12px 16px; border-radius: 6px; margin-bottom: 15px; font-size: 14px;">{{ message }}</div>
+                <div class="flash {{ category }}">{{ message }}</div>
             {% endfor %}
         {% endwith %}
 
-        {% set total_alerts = (alerts.critical|length) + (alerts.warning|length) + (alerts.info|length) %}
-        <div class="alerts-banner {% if alerts.critical %}has-critical{% elif alerts.warning %}has-warning{% else %}all-clear{% endif %}">
-            {% if total_alerts == 0 %}
-                <h2>✅ All clear — no compliance issues right now</h2>
-                <p style="font-size: 13px; color: #718096;">Keep logging temperatures and cleaning tasks to maintain your audit trail.</p>
-            {% else %}
-                <h2>🔔 Compliance Alerts</h2>
-                <div class="alert-summary">
-                    {% if alerts.critical %}<span class="alert-pill critical">🚨 {{ alerts.critical|length }} critical</span>{% endif %}
-                    {% if alerts.warning %}<span class="alert-pill warning">⚠️ {{ alerts.warning|length }} warning</span>{% endif %}
-                    {% if alerts.info %}<span class="alert-pill info">ℹ️ {{ alerts.info|length }} info</span>{% endif %}
+        <div class="page-header">
+            <p class="page-eyebrow">Food Safety</p>
+            <h1>HACCP</h1>
+            <p class="page-subtitle">Daily compliance — temperatures, cleaning, deliveries, and audit reports.</p>
+        </div>
+
+        <!-- Compliance hero -->
+        {% set crit = alerts.critical|length %}
+        {% set warn = alerts.warning|length %}
+        {% if crit > 0 %}
+        <div class="hero-card">
+            <div class="hero-eyebrow">
+                <span class="hero-eyebrow-label">Compliance status</span>
+                <span class="hero-chip">Critical</span>
+            </div>
+            <div class="hero-headline">{{ crit }} Alert{% if crit != 1 %}s{% endif %} need action</div>
+            <div class="hero-detail">Resolve to keep your audit trail clean and EHO-ready.</div>
+            <div class="hero-actions">
+                <a href="/alerts" class="hero-btn">Resolve now →</a>
+                <a href="/haccp/reports" class="hero-btn hero-btn-ghost">Generate report</a>
+            </div>
+        </div>
+        {% elif warn > 0 %}
+        <div class="hero-card" style="background: linear-gradient(135deg, #C8946A 0%, #8B5A2B 100%);">
+            <div class="hero-eyebrow">
+                <span class="hero-eyebrow-label">Compliance status</span>
+                <span class="hero-chip warning">Warning</span>
+            </div>
+            <div class="hero-headline">{{ warn }} Item{% if warn != 1 %}s{% endif %} pending</div>
+            <div class="hero-detail">Tasks overdue or pending review. Best to clear before they become critical.</div>
+            <div class="hero-actions">
+                <a href="/alerts" class="hero-btn">Review →</a>
+                <a href="/haccp/reports" class="hero-btn hero-btn-ghost">Generate report</a>
+            </div>
+        </div>
+        {% else %}
+        <div class="hero-card">
+            <div class="hero-eyebrow">
+                <span class="hero-eyebrow-label">Compliance status</span>
+                <span class="hero-chip success">All clear</span>
+            </div>
+            <div class="hero-headline">Audit-ready</div>
+            <div class="hero-detail">All temperatures logged, cleaning on schedule. Generate a report any time.</div>
+            <div class="hero-actions">
+                <a href="/haccp/reports" class="hero-btn">Generate report →</a>
+                <a href="/haccp/temperatures" class="hero-btn hero-btn-ghost">Log a temp</a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Stats -->
+        <div class="stat-grid">
+            <div class="stat stat-tinted stat-tint-sage">
+                <div class="stat-label">Equipment</div>
+                <div class="stat-value">{{ equipment_count }}</div>
+            </div>
+            <div class="stat stat-tinted stat-tint-blue">
+                <div class="stat-label">Temps today</div>
+                <div class="stat-value">{{ temps_today }}</div>
+            </div>
+            <div class="stat stat-tinted stat-tint-maroon">
+                <div class="stat-label">Failures · 7d</div>
+                <div class="stat-value">{{ temp_failures }}</div>
+            </div>
+            <div class="stat stat-tinted stat-tint-amber">
+                <div class="stat-label">Cleaning tasks</div>
+                <div class="stat-value">{{ cleaning_tasks }}</div>
+            </div>
+            <div class="stat stat-tinted stat-tint-neutral">
+                <div class="stat-label">Deliveries · 7d</div>
+                <div class="stat-value">{{ deliveries_week }}</div>
+            </div>
+        </div>
+
+        <!-- HACCP module tiles -->
+        <h2 class="section-heading">Modules</h2>
+        <div class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
+            <a href="/haccp/temperatures" class="module-tile">
+                <div class="module-tile-icon">🌡️</div>
+                <div class="module-tile-text">
+                    <div class="module-tile-title">Temperatures</div>
+                    <div class="module-tile-desc">Log fridge, freezer &amp; cooking temps</div>
                 </div>
-                <div class="alert-list">
-                    {% for alert in alerts.critical %}
-                    <div class="alert-item">
-                        <span class="alert-item-icon">🚨</span>
-                        <div class="alert-item-body">
-                            <div class="alert-item-title">{{ alert.title }}</div>
-                            <div class="alert-item-detail">{{ alert.detail }}</div>
-                        </div>
-                        <div class="alert-item-actions">
-                            {% if alert.resolvable_id %}
-                            <button class="alert-resolve-btn" onclick='openResolveModal({{ alert.resolvable_id }}, {{ alert.detail|tojson }})'>Resolve</button>
-                            {% else %}
-                            <a href="{{ alert.link }}" class="alert-item-link">Fix →</a>
+            </a>
+            <a href="/haccp/cleaning" class="module-tile">
+                <div class="module-tile-icon">🧼</div>
+                <div class="module-tile-text">
+                    <div class="module-tile-title">Cleaning</div>
+                    <div class="module-tile-desc">Schedules &amp; sign-off</div>
+                </div>
+            </a>
+            <a href="/haccp/deliveries" class="module-tile">
+                <div class="module-tile-icon">🚚</div>
+                <div class="module-tile-text">
+                    <div class="module-tile-title">Deliveries</div>
+                    <div class="module-tile-desc">Goods-in temperature checks</div>
+                </div>
+            </a>
+            <a href="/haccp/reports" class="module-tile">
+                <div class="module-tile-icon">📋</div>
+                <div class="module-tile-text">
+                    <div class="module-tile-title">Reports</div>
+                    <div class="module-tile-desc">Audit-grade PDFs &amp; CSVs</div>
+                </div>
+            </a>
+            <a href="/settings/business" class="module-tile">
+                <div class="module-tile-icon">🏢</div>
+                <div class="module-tile-text">
+                    <div class="module-tile-title">Business settings</div>
+                    <div class="module-tile-desc">Trading details for PDF headers</div>
+                </div>
+            </a>
+            <a href="/alerts" class="module-tile">
+                <div class="module-tile-icon">⚠️</div>
+                <div class="module-tile-text">
+                    <div class="module-tile-title">Alerts</div>
+                    <div class="module-tile-desc">All open compliance issues</div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Recent temperatures -->
+        <h2 class="section-heading">Recent temperature logs</h2>
+        <div class="card" style="padding: 0;">
+            {% if recent_temps and recent_temps|length > 0 %}
+                {% for log in recent_temps %}
+                <div class="temp-row">
+                    <div class="temp-row-body">
+                        <div class="temp-row-name">{{ log.equipment_name }}</div>
+                        <div class="temp-row-meta">
+                            {{ log.equipment_type|capitalize }}
+                            {% if log.min_temp is not none and log.max_temp is not none %}
+                                · target {{ "%.1f"|format(log.min_temp) }}–{{ "%.1f"|format(log.max_temp) }}°C
                             {% endif %}
+                            · {{ log.logged_at.strftime('%d %b · %H:%M') }}
                         </div>
                     </div>
-                    {% endfor %}
-                    {% for alert in alerts.warning[:5] %}
-                    <div class="alert-item">
-                        <span class="alert-item-icon">⚠️</span>
-                        <div class="alert-item-body">
-                            <div class="alert-item-title">{{ alert.title }}</div>
-                            <div class="alert-item-detail">{{ alert.detail }}</div>
-                        </div>
-                        <div class="alert-item-actions">
-                            <a href="{{ alert.link }}" class="alert-item-link">View →</a>
-                        </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span class="temp-reading">{{ "%.1f"|format(log.temperature) }}°C</span>
+                        {% if log.is_voided %}
+                            <span class="temp-status voided">Voided</span>
+                        {% elif log.status == 'pass' %}
+                            <span class="temp-status pass">Pass</span>
+                        {% elif log.status == 'fail' %}
+                            <span class="temp-status fail">Fail</span>
+                        {% else %}
+                            <span class="temp-status warning">{{ log.status }}</span>
+                        {% endif %}
                     </div>
-                    {% endfor %}
-                    {% if alerts.warning|length > 5 %}
-                    <div class="alert-item" style="border-top: 1px solid #edf2f7;">
-                        <a href="/alerts" class="alert-item-link" style="margin: 0 auto;">View all {{ alerts.warning|length }} warnings →</a>
-                    </div>
-                    {% endif %}
-                    {% for alert in alerts.info %}
-                    <div class="alert-item">
-                        <span class="alert-item-icon">ℹ️</span>
-                        <div class="alert-item-body">
-                            <div class="alert-item-title">{{ alert.title }}</div>
-                            <div class="alert-item-detail">{{ alert.detail }}</div>
-                        </div>
-                        <div class="alert-item-actions">
-                            <a href="{{ alert.link }}" class="alert-item-link">Set up →</a>
-                        </div>
-                    </div>
-                    {% endfor %}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-list">
+                    No temperatures logged yet. <a href="/haccp/temperatures">Log your first one →</a>
                 </div>
             {% endif %}
         </div>
-
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-icon">🌡️</div>
-                <div class="stat-number">{{ temps_today }}</div>
-                <div class="stat-label">Temperatures Today</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">⚠️</div>
-                <div class="stat-number {% if temp_failures > 0 %}stat-warning{% endif %}">{{ temp_failures }}</div>
-                <div class="stat-label">Temp Failures (7d)</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">🧹</div>
-                <div class="stat-number">{{ cleaning_tasks }}</div>
-                <div class="stat-label">Cleaning Tasks</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">📦</div>
-                <div class="stat-number">{{ deliveries_week }}</div>
-                <div class="stat-label">Deliveries This Week</div>
-            </div>
-        </div>
-
-        <div class="modules-grid">
-            <a href="/haccp/temperatures" class="module-card">
-                <div class="module-icon">🌡️</div>
-                <div class="module-title">Temperature Logs</div>
-                <div class="module-description">Log fridge, freezer, cooking and hot holding temperatures</div>
-            </a>
-            <a href="/haccp/cleaning" class="module-card">
-                <div class="module-icon">🧹</div>
-                <div class="module-title">Cleaning Schedules</div>
-                <div class="module-description">Track cleaning tasks and maintain hygiene records</div>
-            </a>
-            <a href="/haccp/deliveries" class="module-card">
-                <div class="module-icon">📦</div>
-                <div class="module-title">Delivery Inspection</div>
-                <div class="module-description">Record supplier deliveries and quality checks</div>
-            </a>
-            <a href="/haccp/reports" class="module-card feature">
-                <div class="module-icon">📄</div>
-                <div class="module-title">Audit Reports</div>
-                <div class="module-description">Generate EHO/FSAI-ready PDF exports for any date range</div>
-            </a>
-            <a href="/settings/business" class="module-card">
-                <div class="module-icon">🏢</div>
-                <div class="module-title">Business Settings</div>
-                <div class="module-description">Set business name, FBO registration, and responsible person shown on reports</div>
-            </a>
-        </div>
-
-        {% if recent_temps %}
-        <div class="recent-section">
-            <h2>Recent Temperature Logs</h2>
-            {% for log in recent_temps %}
-            <div class="log-item">
-                <div class="log-info">
-                    <div class="log-equipment">{{ log.equipment_name }}</div>
-                    <div class="log-meta">{{ log.equipment_type }} • {{ log.logged_at.strftime('%d %b %Y %H:%M') }} • {{ log.logged_by }}</div>
-                </div>
-                <div class="log-temp {{ log.status }}">{{ log.temperature }}°C</div>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
     </div>
-
-    <!-- Resolve Alert Modal -->
-    <div class="modal-overlay" id="resolveModal">
-        <div class="modal">
-            <h3>Resolve Failed Temperature</h3>
-            <p class="modal-context" id="resolveContext"></p>
-            <p class="modal-context" style="background: #fef3c7; color: #78350f; padding: 10px; border-radius: 6px;">
-                <strong>HACCP requirement:</strong> A corrective action must be recorded for every failed temperature reading. This note becomes part of the permanent audit trail.
-            </p>
-            <form id="resolveForm" method="POST">
-                <label>Corrective action taken *</label>
-                <textarea name="corrective_action" rows="3" required placeholder="e.g. Equipment limits were set incorrectly during initial setup, recalibrated and verified 25 Apr"></textarea>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                    <button type="submit" class="btn">Record &amp; Resolve</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <script>
-        function toggleMenu() { document.getElementById('mobileMenu').classList.toggle('active'); }
-        function openResolveModal(id, context) {
-            document.getElementById('resolveForm').action = '/haccp/temperature/resolve/' + id;
-            document.getElementById('resolveContext').textContent = context;
-            document.getElementById('resolveModal').classList.add('active');
-        }
-        function closeModal() { document.getElementById('resolveModal').classList.remove('active'); }
-        document.getElementById('resolveModal').addEventListener('click', e => {
-            if (e.target.id === 'resolveModal') closeModal();
-        });
-    </script>
 </body>
 </html>
