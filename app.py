@@ -11,6 +11,7 @@ import json
 from io import StringIO
 import stripe
 from io import BytesIO
+import zipfile
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm, mm
@@ -233,6 +234,7 @@ def login():
                 session['user_id'] = user['id']
                 session['organization_id'] = user['organization_id']
                 session['user_name'] = f"{user['first_name']} {user['last_name']}"
+                session['user_email'] = user['email']
                 session['user_role'] = user['role']
                 
                 cur.execute('UPDATE users SET last_login = %s WHERE id = %s', (datetime.now(), user['id']))
@@ -2662,6 +2664,385 @@ def report_full_pdf():
         _build_deliveries_section(org_id, date_from, date_to),
     ])
     return _send_pdf(buffer, f"haccp-full-report-{date_from}-to-{date_to}.pdf")
+
+
+# ============================================================
+# DATA EXPORT — customer-controlled backups
+# Lets users download a ZIP of all their data, or email it to themselves.
+# Format: 6 CSVs + 1 PDF audit summary, packaged as a single ZIP.
+# Email side requires RESEND_API_KEY env var (falls back to no-op if absent).
+# ============================================================
+
+def _build_data_export_zip(org_id):
+    """Generate a ZIP file containing all customer data as CSVs.
+    Returns BytesIO. Used by both the download route and the email route."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM organizations WHERE id = %s', (org_id,))
+    org = cur.fetchone()
+
+    # Build each CSV in memory
+    csvs = {}
+
+    # 1. Inventory items
+    cur.execute('''
+        SELECT name, category, stock, reorder_point, cost, unit, allergens, updated_at
+        FROM items WHERE organization_id = %s ORDER BY name
+    ''', (org_id,))
+    rows = cur.fetchall()
+    sio = StringIO()
+    w = csv.writer(sio)
+    w.writerow(['Name', 'Category', 'Stock', 'Reorder Point', 'Cost (£)', 'Unit', 'Allergens', 'Last Updated'])
+    for r in rows:
+        allergens = r['allergens']
+        if isinstance(allergens, str):
+            try: allergens = json.loads(allergens)
+            except: allergens = []
+        elif allergens is None:
+            allergens = []
+        w.writerow([
+            r['name'], r['category'] or '', float(r['stock']),
+            float(r['reorder_point']), float(r['cost']),
+            r['unit'], ','.join(allergens) if allergens else '',
+            r['updated_at'].strftime('%Y-%m-%d %H:%M') if r['updated_at'] else ''
+        ])
+    csvs['inventory.csv'] = sio.getvalue()
+
+    # 2. Recipes
+    cur.execute('''
+        SELECT id, name, category, servings, portion_size, selling_price,
+               instructions, notes, manual_allergens, is_ppds,
+               ppds_storage_instructions, ppds_use_by_days, created_at
+        FROM recipes WHERE organization_id = %s ORDER BY name
+    ''', (org_id,))
+    rows = cur.fetchall()
+    sio = StringIO()
+    w = csv.writer(sio)
+    w.writerow(['ID', 'Name', 'Category', 'Servings', 'Portion Size', 'Selling Price (£)',
+                'Instructions', 'Notes', 'Manual Allergens', 'Is PPDS',
+                'PPDS Storage', 'PPDS Use-By (days)', 'Created'])
+    for r in rows:
+        manual = r['manual_allergens']
+        if isinstance(manual, str):
+            try: manual = json.loads(manual)
+            except: manual = []
+        elif manual is None:
+            manual = []
+        w.writerow([
+            r['id'], r['name'], r['category'] or '', r['servings'] or '',
+            r['portion_size'] or '', float(r['selling_price'] or 0),
+            r['instructions'] or '', r['notes'] or '',
+            ','.join(manual) if manual else '',
+            'Yes' if r['is_ppds'] else 'No',
+            r['ppds_storage_instructions'] or '',
+            r['ppds_use_by_days'] or '',
+            r['created_at'].strftime('%Y-%m-%d') if r['created_at'] else ''
+        ])
+    csvs['recipes.csv'] = sio.getvalue()
+
+    # 3. Recipe ingredients (links between recipes and inventory)
+    cur.execute('''
+        SELECT r.name as recipe_name, i.name as ingredient_name, i.unit,
+               ri.quantity, ri.notes
+        FROM recipe_ingredients ri
+        JOIN recipes r ON r.id = ri.recipe_id
+        JOIN items i ON i.id = ri.inventory_item_id
+        WHERE r.organization_id = %s
+        ORDER BY r.name, i.name
+    ''', (org_id,))
+    rows = cur.fetchall()
+    sio = StringIO()
+    w = csv.writer(sio)
+    w.writerow(['Recipe', 'Ingredient', 'Unit', 'Quantity', 'Notes'])
+    for r in rows:
+        w.writerow([r['recipe_name'], r['ingredient_name'], r['unit'],
+                    float(r['quantity']), r['notes'] or ''])
+    csvs['recipe_ingredients.csv'] = sio.getvalue()
+
+    # 4. Temperature logs (full history)
+    cur.execute('''
+        SELECT tl.logged_at, e.name as equipment_name, e.equipment_type,
+               e.min_temp, e.max_temp, tl.temperature, tl.status,
+               tl.corrective_action, tl.notes, tl.is_voided, tl.void_reason,
+               tl.voided_at
+        FROM haccp_temperature_logs tl
+        JOIN haccp_equipment e ON e.id = tl.equipment_id
+        WHERE tl.organization_id = %s
+        ORDER BY tl.logged_at DESC
+    ''', (org_id,))
+    rows = cur.fetchall()
+    sio = StringIO()
+    w = csv.writer(sio)
+    w.writerow(['Logged At', 'Equipment', 'Type', 'Min Temp', 'Max Temp',
+                'Reading (°C)', 'Status', 'Corrective Action', 'Notes',
+                'Voided', 'Void Reason', 'Voided At'])
+    for r in rows:
+        w.writerow([
+            r['logged_at'].strftime('%Y-%m-%d %H:%M') if r['logged_at'] else '',
+            r['equipment_name'], r['equipment_type'] or '',
+            r['min_temp'] if r['min_temp'] is not None else '',
+            r['max_temp'] if r['max_temp'] is not None else '',
+            float(r['temperature']),
+            r['status'], r['corrective_action'] or '', r['notes'] or '',
+            'Yes' if r['is_voided'] else 'No',
+            r['void_reason'] or '',
+            r['voided_at'].strftime('%Y-%m-%d %H:%M') if r['voided_at'] else ''
+        ])
+    csvs['temperature_logs.csv'] = sio.getvalue()
+
+    # 5. Cleaning logs
+    cur.execute('''
+        SELECT cl.completed_at, ct.task_name, ct.area, cl.completed_by, cl.notes
+        FROM haccp_cleaning_logs cl
+        JOIN haccp_cleaning_tasks ct ON ct.id = cl.task_id
+        WHERE cl.organization_id = %s
+        ORDER BY cl.completed_at DESC
+    ''', (org_id,))
+    rows = cur.fetchall()
+    sio = StringIO()
+    w = csv.writer(sio)
+    w.writerow(['Completed At', 'Task', 'Area', 'Completed By', 'Notes'])
+    for r in rows:
+        w.writerow([
+            r['completed_at'].strftime('%Y-%m-%d %H:%M') if r['completed_at'] else '',
+            r['task_name'], r['area'] or '',
+            r['completed_by'] or '', r['notes'] or ''
+        ])
+    csvs['cleaning_logs.csv'] = sio.getvalue()
+
+    # 6. Delivery logs
+    cur.execute('''
+        SELECT delivery_date, supplier_name, chilled_temp, frozen_temp,
+               packaging_ok, expiry_dates_ok, quality_ok,
+               accepted, notes, inspected_by
+        FROM haccp_delivery_logs
+        WHERE organization_id = %s
+        ORDER BY delivery_date DESC
+    ''', (org_id,))
+    rows = cur.fetchall()
+    sio = StringIO()
+    w = csv.writer(sio)
+    w.writerow(['Delivery Date', 'Supplier', 'Chilled Temp (°C)', 'Frozen Temp (°C)',
+                'Packaging OK', 'Expiry Dates OK', 'Quality OK',
+                'Accepted', 'Inspected By', 'Notes'])
+    for r in rows:
+        w.writerow([
+            r['delivery_date'].strftime('%Y-%m-%d %H:%M') if r['delivery_date'] else '',
+            r['supplier_name'] or '',
+            float(r['chilled_temp']) if r['chilled_temp'] is not None else '',
+            float(r['frozen_temp']) if r['frozen_temp'] is not None else '',
+            'Yes' if r['packaging_ok'] else 'No',
+            'Yes' if r['expiry_dates_ok'] else 'No',
+            'Yes' if r['quality_ok'] else 'No',
+            'Yes' if r['accepted'] else 'No',
+            r['inspected_by'] or '', r['notes'] or ''
+        ])
+    csvs['delivery_logs.csv'] = sio.getvalue()
+
+    cur.close()
+    conn.close()
+
+    # Generate the ZIP
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # README explaining the contents
+        readme = (
+            f"YieldGuard Data Export\n"
+            f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}\n"
+            f"Organisation: {(org.get('business_name') if org else None) or 'Unnamed'}\n"
+            f"\n"
+            f"This ZIP contains all your YieldGuard data in CSV format.\n"
+            f"CSVs open in Excel, Numbers, Google Sheets, and most spreadsheet apps.\n"
+            f"\n"
+            f"Files included:\n"
+            f"- inventory.csv         All inventory items with allergen flags\n"
+            f"- recipes.csv           All recipes with PPDS settings\n"
+            f"- recipe_ingredients.csv  Links between recipes and inventory items\n"
+            f"- temperature_logs.csv  Full temperature history (incl. voided entries)\n"
+            f"- cleaning_logs.csv     Cleaning task sign-offs\n"
+            f"- delivery_logs.csv     Goods-in temperature checks\n"
+            f"\n"
+            f"Your data is yours. Keep this archive somewhere safe.\n"
+        )
+        zf.writestr('README.txt', readme)
+        for filename, content in csvs.items():
+            zf.writestr(filename, content)
+
+    zip_buffer.seek(0)
+    return zip_buffer, org
+
+
+@app.route('/data-export')
+@login_required
+def data_export_page():
+    """Page where customers download a backup or email one to themselves."""
+    org_id = get_current_org_id()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM organizations WHERE id = %s', (org_id,))
+    org = cur.fetchone()
+    cur.close()
+    conn.close()
+    return render_template('data_export.html', org=org,
+                           user_email=session.get('user_email', ''))
+
+
+@app.route('/data-export/download')
+@login_required
+def data_export_download():
+    """Stream a ZIP of all customer data."""
+    try:
+        org_id = get_current_org_id()
+        zip_buffer, org = _build_data_export_zip(org_id)
+        date_str = datetime.now().strftime('%Y-%m-%d')
+        org_name = (org.get('business_name') if org else None) or 'yieldguard'
+        # Sanitise org name for filename
+        safe_name = ''.join(c if c.isalnum() else '-' for c in org_name).lower().strip('-')
+        filename = f"{safe_name}-backup-{date_str}.zip"
+        response = make_response(zip_buffer.getvalue())
+        response.headers['Content-Type'] = 'application/zip'
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+    except Exception as e:
+        print(f"Data export download error: {e}")
+        traceback.print_exc()
+        flash('Error generating backup. Please try again or contact support.', 'danger')
+        return redirect('/data-export')
+
+
+def _send_export_email(to_email, zip_buffer, org_name):
+    """Send the ZIP backup as an email attachment via Resend.
+    Returns (success: bool, error_message: str or None)."""
+    api_key = os.environ.get('RESEND_API_KEY')
+    if not api_key:
+        return (False, "Email service not configured yet (no RESEND_API_KEY). "
+                       "Use the download button instead, or ask Sean to set up Resend.")
+
+    # Lazy-import resend so the app doesn't crash if package not yet installed
+    try:
+        import resend
+    except ImportError:
+        return (False, "Resend package not installed. Run: pip install resend")
+
+    resend.api_key = api_key
+    sender = os.environ.get('RESEND_FROM', 'YieldGuard <onboarding@resend.dev>')
+
+    date_str = datetime.now().strftime('%d %B %Y')
+    safe_name = ''.join(c if c.isalnum() else '-' for c in (org_name or 'yieldguard')).lower().strip('-')
+    filename = f"{safe_name}-backup-{datetime.now().strftime('%Y-%m-%d')}.zip"
+
+    import base64
+    zip_b64 = base64.b64encode(zip_buffer.getvalue()).decode('ascii')
+
+    html_body = f"""
+    <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+        <h2 style="color: #4A6B45; margin-bottom: 8px;">Your YieldGuard backup</h2>
+        <p style="color: #555; line-height: 1.5;">Hi,</p>
+        <p style="color: #555; line-height: 1.5;">
+            Attached is a complete backup of your YieldGuard data as of <strong>{date_str}</strong>.
+            The ZIP contains CSV files that open in Excel, Numbers, or Google Sheets.
+        </p>
+        <p style="color: #555; line-height: 1.5;">
+            Keep this archive somewhere safe — it's your guarantee that even if anything ever
+            went wrong with our systems, you'd still have your data.
+        </p>
+        <p style="color: #555; line-height: 1.5; margin-top: 24px;">
+            — The YieldGuard team
+        </p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
+        <p style="color: #999; font-size: 12px;">
+            You requested this email from your YieldGuard account.
+            If you didn't request it, please contact us.
+        </p>
+    </div>
+    """
+
+    try:
+        resend.Emails.send({
+            "from": sender,
+            "to": to_email,
+            "subject": f"Your YieldGuard backup — {date_str}",
+            "html": html_body,
+            "attachments": [{
+                "filename": filename,
+                "content": zip_b64,
+            }],
+        })
+        return (True, None)
+    except Exception as e:
+        return (False, str(e))
+
+
+@app.route('/data-export/email-now', methods=['POST'])
+@login_required
+def data_export_email_now():
+    """Email the customer their backup right now."""
+    try:
+        org_id = get_current_org_id()
+        to_email = (request.form.get('email') or session.get('user_email') or '').strip()
+        if not to_email:
+            flash('No email address available. Add one in Business Settings.', 'danger')
+            return redirect('/data-export')
+
+        zip_buffer, org = _build_data_export_zip(org_id)
+        org_name = (org.get('business_name') if org else None) or 'YieldGuard'
+
+        success, err = _send_export_email(to_email, zip_buffer, org_name)
+        if success:
+            flash(f'Backup emailed to {to_email}. Check your inbox.', 'success')
+        else:
+            flash(f'Email failed: {err}', 'danger')
+        return redirect('/data-export')
+    except Exception as e:
+        print(f"Data export email error: {e}")
+        traceback.print_exc()
+        flash('Error sending backup email.', 'danger')
+        return redirect('/data-export')
+
+
+@app.route('/data-export/monthly-cron', methods=['POST', 'GET'])
+def data_export_monthly_cron():
+    """Endpoint hit by Render Cron Job once per month.
+    Iterates all orgs, generates backup, emails to primary user.
+    Protected by a shared secret in the CRON_SECRET env var."""
+    expected = os.environ.get('CRON_SECRET')
+    provided = request.headers.get('X-Cron-Secret') or request.args.get('secret')
+    if not expected or provided != expected:
+        return ('Unauthorized', 401)
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT o.id as org_id, o.business_name, u.email
+            FROM organizations o
+            JOIN users u ON u.id = (
+                SELECT MIN(id) FROM users
+                WHERE organization_id = o.id AND is_active = true
+            )
+        ''')
+        orgs = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        results = {'success': 0, 'failed': 0, 'errors': []}
+        for row in orgs:
+            try:
+                zip_buffer, org = _build_data_export_zip(row['org_id'])
+                org_name = row.get('business_name') or 'YieldGuard'
+                success, err = _send_export_email(row['email'], zip_buffer, org_name)
+                if success:
+                    results['success'] += 1
+                else:
+                    results['failed'] += 1
+                    results['errors'].append(f"org {row['org_id']}: {err}")
+            except Exception as e:
+                results['failed'] += 1
+                results['errors'].append(f"org {row['org_id']}: {str(e)}")
+
+        return (json.dumps(results), 200, {'Content-Type': 'application/json'})
+    except Exception as e:
+        return (f'Cron error: {str(e)}', 500)
 
 
 if __name__ == '__main__':
