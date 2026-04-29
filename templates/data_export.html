@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Export - YieldGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+    <style>
+        .export-card {
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-radius: 12px;
+            padding: 22px;
+            margin-bottom: 16px;
+        }
+        .export-card-icon {
+            width: 44px;
+            height: 44px;
+            background: #EEF1ED;
+            color: #4A6B45;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            margin-bottom: 12px;
+        }
+        .export-card h2 {
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #0A0A0A;
+            letter-spacing: -0.01em;
+        }
+        .export-card p {
+            color: #6B6860;
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 14px;
+        }
+        .info-card {
+            background: #F4F2EC;
+            border-radius: 12px;
+            padding: 16px 18px;
+            font-size: 13.5px;
+            color: #4A4842;
+            line-height: 1.55;
+            margin-bottom: 16px;
+        }
+        .info-card strong { color: #0A0A0A; }
+        .file-list {
+            list-style: none;
+            margin: 8px 0 0;
+            padding: 0;
+            font-size: 13px;
+            color: #6B6860;
+        }
+        .file-list li {
+            padding: 4px 0;
+            display: flex;
+            gap: 8px;
+        }
+        .file-list code {
+            background: #F4F2EC;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #2D4128;
+            font-family: ui-monospace, monospace;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo"><span class="logo-icon">🍳</span><span>YieldGuard</span></a>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/recipes">Recipes</a>
+                <a href="/haccp">HACCP</a>
+                <a href="/alerts">Alerts</a>
+                <a href="/billing">Billing</a>
+                <a href="/logout">Logout</a>
+            </div>
+            <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+        <div class="mobile-menu" id="mobileMenu">
+            <a href="/">Dashboard</a>
+            <a href="/inventory">Inventory</a>
+            <a href="/recipes">Recipes</a>
+            <a href="/haccp">HACCP</a>
+            <a href="/alerts">Alerts</a>
+            <a href="/billing">Billing</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container-narrow">
+        <a href="/settings/business" class="back-link">← Back to Settings</a>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-header">
+            <p class="page-eyebrow">Data Protection</p>
+            <h1>Your data, in your hands</h1>
+            <p class="page-subtitle">Download a complete backup, or have one emailed to you.</p>
+        </div>
+
+        <div class="info-card">
+            <strong>Why this matters:</strong> Your YieldGuard data lives in a secure cloud database with daily automated backups. But it's good practice to keep an offline copy of your own — if our service ever had an outage, you'd still have last month's records on your laptop. Most EHO inspectors will accept these CSV exports as part of an audit trail.
+        </div>
+
+        <div class="export-card">
+            <div class="export-card-icon">⬇️</div>
+            <h2>Download a backup now</h2>
+            <p>Generate a ZIP file containing all your data as CSV files (open in Excel, Numbers, or Google Sheets) plus a README explaining the contents.</p>
+            <a href="/data-export/download" class="btn">Download ZIP backup</a>
+        </div>
+
+        <div class="export-card">
+            <div class="export-card-icon">📧</div>
+            <h2>Email a backup to me</h2>
+            <p>Send the same ZIP to your inbox. Useful if you're on a phone or want a record in your email archive.</p>
+            <form action="/data-export/email-now" method="POST" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;">
+                <div class="form-group" style="flex: 1; min-width: 240px;">
+                    <label>Send to</label>
+                    <input type="email" name="email" required value="{{ user_email }}" placeholder="you@yourkitchen.co.uk">
+                </div>
+                <button type="submit" class="btn btn-secondary">Email backup now</button>
+            </form>
+            <p class="form-hint" style="margin-top: 10px;">⚠️ During testing, emails come from <code style="background:#F4F2EC; padding:1px 5px; border-radius:3px;">onboarding@resend.dev</code> and may land in spam. Once a YieldGuard domain is verified, emails will arrive from <code style="background:#F4F2EC; padding:1px 5px; border-radius:3px;">backups@yieldguard.co.uk</code>.</p>
+        </div>
+
+        <div class="export-card">
+            <div class="export-card-icon">📦</div>
+            <h2>What's in the backup?</h2>
+            <p>The ZIP contains six CSV files covering everything in your YieldGuard account:</p>
+            <ul class="file-list">
+                <li><code>inventory.csv</code> — All inventory items with allergen flags</li>
+                <li><code>recipes.csv</code> — All recipes with PPDS settings</li>
+                <li><code>recipe_ingredients.csv</code> — Recipe-to-ingredient links</li>
+                <li><code>temperature_logs.csv</code> — Full temperature history (incl. voided entries with reasons)</li>
+                <li><code>cleaning_logs.csv</code> — Cleaning task sign-offs</li>
+                <li><code>delivery_logs.csv</code> — Goods-in temperature checks</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
