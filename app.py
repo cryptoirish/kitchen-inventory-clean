@@ -351,7 +351,8 @@ def home():
                              temps_today=temps_today,
                              critical_count=critical_count,
                              warning_count=warning_count,
-                             user_first_name=session.get('user_name', 'there').split(' ')[0])
+                             user_first_name=session.get('user_name', 'there').split(' ')[0],
+                             today_string=datetime.now().strftime('%A, %d %B'))
     except Exception as e:
         print(f"Dashboard error: {e}")
         traceback.print_exc()
@@ -365,7 +366,8 @@ def home():
                              temps_today=0,
                              critical_count=0,
                              warning_count=0,
-                             user_first_name=session.get('user_name', 'there').split(' ')[0])
+                             user_first_name=session.get('user_name', 'there').split(' ')[0],
+                             today_string=datetime.now().strftime('%A, %d %B'))
 
 @app.route('/inventory')
 @login_required
@@ -632,9 +634,20 @@ def alerts():
         low_stock = cur.fetchall()
         cur.close()
         conn.close()
-        return render_template('alerts.html', items=low_stock)
+
+        # Compliance / HACCP alerts (shared with dashboard)
+        compliance = get_compliance_alerts(org_id)
+        haccp_alerts = compliance['critical'] + compliance['warning'] + compliance['info']
+
+        return render_template('alerts.html',
+                               items=low_stock,
+                               haccp_alerts=haccp_alerts,
+                               critical_count=len(compliance['critical']),
+                               warning_count=len(compliance['warning']),
+                               info_count=len(compliance['info']))
     except Exception as e:
         print(f"Alerts error: {e}")
+        traceback.print_exc()
         return f"Error loading alerts: {str(e)}", 500
 
 @app.route('/recipes')
