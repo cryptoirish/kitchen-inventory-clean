@@ -12,6 +12,10 @@ from io import StringIO
 import stripe
 from io import BytesIO
 import zipfile
+import uuid
+import base64
+import urllib.request
+import urllib.parse
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm, mm
@@ -2870,6 +2874,352 @@ def _build_data_export_zip(org_id):
 
     zip_buffer.seek(0)
     return zip_buffer, org
+
+
+# ============================================================
+# PEST CONTROL — visit logs, sightings, contractor details
+# Photos uploaded to Supabase Storage (bucket: pest-photos)
+# ============================================================
+
+def _upload_pest_photo(file_storage):
+    """Upload a photo to Supabase Storage. Returns (url, filename) or (None, None)."""
+    if not file_storage or not file_storage.filename:
+        return (None, None)
+    supabase_url = os.environ.get('SUPABASE_URL', '').rstrip('/')
+    service_key = os.environ.get('SUPABASE_SERVICE_KEY')
+    if not supabase_url or not service_key:
+        print("Photo upload skipped: SUPABASE_URL or SUPABASE_SERVICE_KEY not set")
+        return (None, None)
+
+    # Generate a unique filename, preserve the extension
+    ext = ''
+    if '.' in file_storage.filename:
+        ext = '.' + file_storage.filename.rsplit('.', 1)[1].lower()
+        # Limit to safe image extensions
+        if ext not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic'):
+            ext = '.jpg'
+    safe_name = f"{uuid.uuid4().hex}{ext}"
+
+    file_bytes = file_storage.read()
+    if not file_bytes:
+        return (None, None)
+
+    # Determine content type
+    content_type = file_storage.content_type or 'image/jpeg'
+
+    # Upload via Supabase Storage REST API
+    upload_url = f"{supabase_url}/storage/v1/object/pest-photos/{safe_name}"
+    req = urllib.request.Request(
+        upload_url,
+        data=file_bytes,
+        method='POST',
+        headers={
+            'Authorization': f'Bearer {service_key}',
+            'Content-Type': content_type,
+            'x-upsert': 'true',
+        }
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            if resp.status not in (200, 201):
+                print(f"Photo upload failed status {resp.status}")
+                return (None, None)
+    except Exception as e:
+        print(f"Photo upload error: {e}")
+        return (None, None)
+
+    # Public URL (bucket is public)
+    public_url = f"{supabase_url}/storage/v1/object/public/pest-photos/{safe_name}"
+    return (public_url, file_storage.filename)
+
+
+@app.route('/haccp/pest-control')
+@login_required
+def pest_control():
+    """Main pest control page — contract, recent visits, open sightings."""
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+
+        # Contract (one row per org, may not exist yet)
+        cur.execute('SELECT * FROM haccp_pest_contract WHERE organization_id = %s', (org_id,))
+        contract = cur.fetchone()
+
+        # Recent visits (last 20)
+        cur.execute('''
+            SELECT * FROM haccp_pest_visits
+            WHERE organization_id = %s
+            ORDER BY visit_date DESC
+            LIMIT 20
+        ''', (org_id,))
+        visits = cur.fetchall()
+
+        # Open sightings (unresolved first, then recent resolved)
+        cur.execute('''
+            SELECT * FROM haccp_pest_sightings
+            WHERE organization_id = %s
+            ORDER BY is_resolved ASC, sighted_at DESC
+            LIMIT 20
+        ''', (org_id,))
+        sightings = cur.fetchall()
+
+        # Stats for the page
+        cur.execute('''
+            SELECT COUNT(*) as cnt FROM haccp_pest_sightings
+            WHERE organization_id = %s AND is_resolved = false
+        ''', (org_id,))
+        unresolved_count = cur.fetchone()['cnt']
+
+        cur.execute('''
+            SELECT COUNT(*) as cnt FROM haccp_pest_visits
+            WHERE organization_id = %s AND visit_date >= NOW() - INTERVAL '30 days'
+        ''', (org_id,))
+        visits_30d = cur.fetchone()['cnt']
+
+        # Days since last visit (for warning display)
+        days_since_last = None
+        if contract and contract.get('last_visit_date'):
+            days_since_last = (datetime.now().date() - contract['last_visit_date']).days
+
+        cur.close()
+        conn.close()
+
+        return render_template('pest_control.html',
+                               contract=contract,
+                               visits=visits,
+                               sightings=sightings,
+                               unresolved_count=unresolved_count,
+                               visits_30d=visits_30d,
+                               days_since_last=days_since_last)
+    except Exception as e:
+        print(f"Pest control page error: {e}")
+        traceback.print_exc()
+        return f"Error loading pest control page: {str(e)}", 500
+
+
+@app.route('/haccp/pest-control/contract', methods=['POST'])
+@login_required
+def save_pest_contract():
+    """Create or update the pest control contract row."""
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+
+        has_contract = request.form.get('has_contract') == 'on'
+        contractor_name = request.form.get('contractor_name', '').strip() or None
+        contractor_phone = request.form.get('contractor_phone', '').strip() or None
+        contractor_email = request.form.get('contractor_email', '').strip() or None
+        contract_type = request.form.get('contract_type', '').strip() or None
+        visit_frequency_days = request.form.get('visit_frequency_days', '').strip()
+        visit_frequency_days = int(visit_frequency_days) if visit_frequency_days.isdigit() else None
+        notes = request.form.get('notes', '').strip() or None
+
+        # Upsert (insert or update by org_id)
+        cur.execute('''
+            INSERT INTO haccp_pest_contract
+                (organization_id, has_contract, contractor_name, contractor_phone,
+                 contractor_email, contract_type, visit_frequency_days, notes, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT (organization_id) DO UPDATE SET
+                has_contract = EXCLUDED.has_contract,
+                contractor_name = EXCLUDED.contractor_name,
+                contractor_phone = EXCLUDED.contractor_phone,
+                contractor_email = EXCLUDED.contractor_email,
+                contract_type = EXCLUDED.contract_type,
+                visit_frequency_days = EXCLUDED.visit_frequency_days,
+                notes = EXCLUDED.notes,
+                updated_at = NOW()
+        ''', (org_id, has_contract, contractor_name, contractor_phone,
+              contractor_email, contract_type, visit_frequency_days, notes))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Pest control contract saved.', 'success')
+        return redirect('/haccp/pest-control')
+    except Exception as e:
+        print(f"Save pest contract error: {e}")
+        traceback.print_exc()
+        flash('Error saving contract details.', 'danger')
+        return redirect('/haccp/pest-control')
+
+
+@app.route('/haccp/pest-control/visit/new', methods=['GET', 'POST'])
+@login_required
+def pest_visit_new():
+    if request.method == 'GET':
+        return render_template('pest_visit_form.html', visit=None)
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+
+        photo_url, photo_filename = _upload_pest_photo(request.files.get('photo'))
+
+        visit_date = request.form.get('visit_date')
+        if not visit_date:
+            visit_date = datetime.now().isoformat()
+
+        cur.execute('''
+            INSERT INTO haccp_pest_visits
+                (organization_id, visit_date, visit_type, inspector_name, is_contractor,
+                 areas_inspected, findings, activity_found, action_taken, notes,
+                 photo_url, photo_filename, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        ''', (
+            org_id,
+            visit_date,
+            request.form.get('visit_type', 'scheduled'),
+            request.form.get('inspector_name', '').strip() or None,
+            request.form.get('is_contractor') == 'on',
+            request.form.get('areas_inspected', '').strip() or None,
+            request.form.get('findings', '').strip() or None,
+            request.form.get('activity_found') == 'on',
+            request.form.get('action_taken', '').strip() or None,
+            request.form.get('notes', '').strip() or None,
+            photo_url,
+            photo_filename,
+            session.get('user_name', 'Unknown')
+        ))
+
+        # Update contract's last_visit_date and next_visit_due
+        visit_dt = datetime.fromisoformat(visit_date.replace('Z', '+00:00')) if 'T' in visit_date else datetime.strptime(visit_date, '%Y-%m-%d')
+        cur.execute('SELECT visit_frequency_days FROM haccp_pest_contract WHERE organization_id = %s', (org_id,))
+        contract_row = cur.fetchone()
+        if contract_row:
+            freq = contract_row.get('visit_frequency_days')
+            next_due = (visit_dt + timedelta(days=freq)).date() if freq else None
+            cur.execute('''
+                UPDATE haccp_pest_contract
+                SET last_visit_date = %s, next_visit_due = %s, updated_at = NOW()
+                WHERE organization_id = %s
+            ''', (visit_dt.date(), next_due, org_id))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Pest control visit logged.', 'success')
+        return redirect('/haccp/pest-control')
+    except Exception as e:
+        print(f"Pest visit new error: {e}")
+        traceback.print_exc()
+        flash('Error logging visit.', 'danger')
+        return redirect('/haccp/pest-control')
+
+
+@app.route('/haccp/pest-control/visit/<int:visit_id>/delete', methods=['POST'])
+@login_required
+def pest_visit_delete(visit_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM haccp_pest_visits WHERE id = %s AND organization_id = %s',
+                    (visit_id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Visit deleted.', 'success')
+    except Exception as e:
+        print(f"Pest visit delete error: {e}")
+        flash('Error deleting visit.', 'danger')
+    return redirect('/haccp/pest-control')
+
+
+@app.route('/haccp/pest-control/sighting/new', methods=['GET', 'POST'])
+@login_required
+def pest_sighting_new():
+    if request.method == 'GET':
+        return render_template('pest_sighting_form.html', sighting=None)
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+
+        photo_url, photo_filename = _upload_pest_photo(request.files.get('photo'))
+
+        sighted_at = request.form.get('sighted_at') or datetime.now().isoformat()
+
+        cur.execute('''
+            INSERT INTO haccp_pest_sightings
+                (organization_id, sighted_at, pest_type, location, description,
+                 reported_by, severity, action_taken, contractor_notified,
+                 photo_url, photo_filename)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (
+            org_id,
+            sighted_at,
+            request.form.get('pest_type', '').strip() or 'unknown',
+            request.form.get('location', '').strip() or None,
+            request.form.get('description', '').strip() or None,
+            request.form.get('reported_by', '').strip() or session.get('user_name', 'Unknown'),
+            request.form.get('severity', 'low'),
+            request.form.get('action_taken', '').strip() or None,
+            request.form.get('contractor_notified') == 'on',
+            photo_url,
+            photo_filename
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Sighting logged. Make sure to action it.', 'success')
+        return redirect('/haccp/pest-control')
+    except Exception as e:
+        print(f"Pest sighting new error: {e}")
+        traceback.print_exc()
+        flash('Error logging sighting.', 'danger')
+        return redirect('/haccp/pest-control')
+
+
+@app.route('/haccp/pest-control/sighting/<int:sighting_id>/resolve', methods=['POST'])
+@login_required
+def pest_sighting_resolve(sighting_id):
+    try:
+        org_id = get_current_org_id()
+        resolution_notes = request.form.get('resolution_notes', '').strip() or None
+        if not resolution_notes:
+            flash('Add a resolution note before closing the sighting.', 'danger')
+            return redirect('/haccp/pest-control')
+
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE haccp_pest_sightings
+            SET is_resolved = true,
+                resolved_at = NOW(),
+                resolved_by = %s,
+                resolution_notes = %s
+            WHERE id = %s AND organization_id = %s
+        ''', (session.get('user_name', 'Unknown'), resolution_notes, sighting_id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Sighting marked resolved.', 'success')
+    except Exception as e:
+        print(f"Pest sighting resolve error: {e}")
+        flash('Error resolving sighting.', 'danger')
+    return redirect('/haccp/pest-control')
+
+
+@app.route('/haccp/pest-control/sighting/<int:sighting_id>/delete', methods=['POST'])
+@login_required
+def pest_sighting_delete(sighting_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM haccp_pest_sightings WHERE id = %s AND organization_id = %s',
+                    (sighting_id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Sighting deleted.', 'success')
+    except Exception as e:
+        print(f"Pest sighting delete error: {e}")
+        flash('Error deleting sighting.', 'danger')
+    return redirect('/haccp/pest-control')
 
 
 @app.route('/data-export')
