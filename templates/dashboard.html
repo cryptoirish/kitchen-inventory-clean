@@ -6,7 +6,6 @@
     <title>Dashboard - YieldGuard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
     <style>
-        /* Dashboard-specific extensions to the design system */
         .hero-card {
             background: linear-gradient(135deg, #7CA37B 0%, #4A6B45 100%);
             border-radius: 14px;
@@ -67,24 +66,11 @@
             transition: background 0.15s;
         }
         .hero-btn:hover { background: rgba(255,255,255,0.32); color: #FFFFFF; }
-        .hero-btn-ghost {
-            background: transparent;
-            opacity: 0.85;
-        }
+        .hero-btn-ghost { background: transparent; opacity: 0.85; }
         .hero-btn-ghost:hover { opacity: 1; background: rgba(255,255,255,0.1); }
 
-        /* Tinted stat cards override */
-        .stat-tinted {
-            border: none;
-            padding: 16px;
-            border-radius: 12px;
-        }
-        .stat-tinted .stat-label {
-            text-transform: uppercase;
-            font-size: 11px;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-        }
+        .stat-tinted { border: none; padding: 16px; border-radius: 12px; }
+        .stat-tinted .stat-label { text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; }
         .stat-tint-sage { background: #EEF1ED; }
         .stat-tint-sage .stat-label { color: #2D4128; }
         .stat-tint-amber { background: #FEF6E7; }
@@ -96,7 +82,6 @@
         .stat-tint-neutral { background: #F4F2EC; }
         .stat-tint-neutral .stat-label { color: #6B6860; }
 
-        /* Module tiles with icon squares */
         .module-tile {
             display: flex;
             gap: 14px;
@@ -148,6 +133,7 @@
                 <a href="/" class="active">Dashboard</a>
                 <a href="/inventory">Inventory</a>
                 <a href="/recipes">Recipes</a>
+                <a href="/menus">Menus</a>
                 <a href="/haccp">HACCP</a>
                 <a href="/alerts">Alerts</a>
                 <a href="/billing">Billing</a>
@@ -161,6 +147,7 @@
             <a href="/" class="active">Dashboard</a>
             <a href="/inventory">Inventory</a>
             <a href="/recipes">Recipes</a>
+            <a href="/menus">Menus</a>
             <a href="/haccp">HACCP</a>
             <a href="/alerts">Alerts</a>
             <a href="/billing">Billing</a>
@@ -181,7 +168,6 @@
             <p class="page-subtitle">Here's what's happening across your kitchen.</p>
         </div>
 
-        <!-- HERO COMPLIANCE CARD -->
         {% if critical_count > 0 %}
         <div class="hero-card">
             <div class="hero-eyebrow">
@@ -223,7 +209,6 @@
         </div>
         {% endif %}
 
-        <!-- TINTED STAT CARDS -->
         <div class="stat-grid">
             <div class="stat stat-tinted stat-tint-sage">
                 <div class="stat-label">Inventory items</div>
@@ -247,7 +232,6 @@
             </div>
         </div>
 
-        <!-- MODULE TILES -->
         <h2 style="font-size: 13px; font-weight: 600; color: #6B6860; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; margin-top: 8px;">Modules</h2>
         <div class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
             <a href="/haccp" class="module-tile">
@@ -262,6 +246,13 @@
                 <div class="module-tile-text">
                     <div class="module-tile-title">Recipes</div>
                     <div class="module-tile-desc">Costing, allergens, PPDS labels</div>
+                </div>
+            </a>
+            <a href="/menus" class="module-tile">
+                <div class="module-tile-icon">📋</div>
+                <div class="module-tile-text">
+                    <div class="module-tile-title">Menus</div>
+                    <div class="module-tile-desc">Menu costing, GP%, VAT, forecasting</div>
                 </div>
             </a>
             <a href="/inventory" class="module-tile">
