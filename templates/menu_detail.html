@@ -83,9 +83,7 @@
         @media (max-width: 600px) {
             .cost-grid { grid-template-columns: 1fr 1fr; }
         }
-        .cost-cell {
-            text-align: center;
-        }
+        .cost-cell { text-align: center; }
         .cost-cell-label {
             font-size: 10px;
             text-transform: uppercase;
@@ -149,6 +147,26 @@
             margin-left: 4px;
             font-weight: 500;
         }
+
+        .move-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .move-btn {
+            background: #FFFFFF;
+            border: 1px solid #D6D2C7;
+            border-radius: 6px;
+            width: 28px;
+            height: 22px;
+            font-size: 11px;
+            cursor: pointer;
+            color: #6B6860;
+            padding: 0;
+            line-height: 1;
+        }
+        .move-btn:hover { background: #F4F2EC; color: #0A0A0A; }
+        .move-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
         .empty-state {
             background: #FFFFFF;
@@ -264,6 +282,9 @@
                 </div>
             </div>
             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                {% if items and items|length > 0 %}
+                <a href="/menus/{{ menu.id }}/report.pdf" class="btn">📄 PDF report</a>
+                {% endif %}
                 <a href="/menus/{{ menu.id }}/edit" class="btn btn-secondary">Edit details</a>
                 <form action="/menus/{{ menu.id }}/delete" method="POST" onsubmit="return confirm('Delete this menu? Recipes will not be deleted.');" style="display: inline;">
                     <button type="submit" class="btn btn-secondary" style="color: #7C2D2D;">Delete</button>
@@ -271,7 +292,6 @@
             </div>
         </div>
 
-        <!-- Summary stats (only when there are items with sales) -->
         {% if total_weekly_revenue > 0 %}
         <div class="stat-grid">
             <div class="stat stat-tinted stat-tint-sage">
@@ -294,7 +314,6 @@
             Below 50% GP usually means losing money. All figures are <strong>ex-VAT</strong> for proper margin analysis.
         </div>
 
-        <!-- Add a recipe -->
         {% if available_recipes and available_recipes|length > 0 %}
         <div class="add-recipe-card">
             <form action="/menus/{{ menu.id }}/add-recipe" method="POST">
@@ -318,7 +337,6 @@
         </div>
         {% endif %}
 
-        <!-- Menu items -->
         {% if items and items|length > 0 %}
         <div class="section-heading-row">
             <h2>Recipes on this menu</h2>
@@ -328,10 +346,22 @@
         {% set gp_class = 'good' if item.gp_percent >= 65 else ('ok' if item.gp_percent >= 50 else ('bad' if item.gp_percent > 0 else 'none')) %}
         <div class="item-card gp-{{ gp_class }}">
             <div class="item-row-1">
-                <div class="item-name">
-                    <a href="/recipes/{{ item.recipe_id }}">{{ item.recipe_name }}</a>
-                    <span class="vat-tag">VAT {{ "%.0f"|format(item.vat_rate) }}%</span>
-                    {% if item.is_using_override %}<span class="override-tag">Custom price</span>{% endif %}
+                <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+                    <div class="move-buttons">
+                        <form action="/menus/{{ menu.id }}/items/{{ item.id }}/move" method="POST" style="margin: 0;">
+                            <input type="hidden" name="direction" value="up">
+                            <button type="submit" class="move-btn" {% if loop.first %}disabled{% endif %} title="Move up">▲</button>
+                        </form>
+                        <form action="/menus/{{ menu.id }}/items/{{ item.id }}/move" method="POST" style="margin: 0;">
+                            <input type="hidden" name="direction" value="down">
+                            <button type="submit" class="move-btn" {% if loop.last %}disabled{% endif %} title="Move down">▼</button>
+                        </form>
+                    </div>
+                    <div class="item-name" style="flex: 1; min-width: 0;">
+                        <a href="/recipes/{{ item.recipe_id }}">{{ item.recipe_name }}</a>
+                        <span class="vat-tag">VAT {{ "%.0f"|format(item.vat_rate) }}%</span>
+                        {% if item.is_using_override %}<span class="override-tag">Custom price</span>{% endif %}
+                    </div>
                 </div>
                 <div>
                     {% if item.gp_percent > 0 %}
