@@ -974,6 +974,366 @@ def remove_ingredient(recipe_id, ingredient_id):
     except Exception as e:
         return redirect(f'/recipes/{recipe_id}')
 
+
+# ============================================================
+# MENU PLANNING — group recipes into menus, costing, GP analysis
+# ============================================================
+
+def _menu_costing(menu_id, org_id):
+    """Return list of menu items with full costing breakdown.
+    Each row contains: id, recipe_id, recipe_name, ingredient_cost,
+    selling_price (menu override or recipe default), vat_rate,
+    selling_price_ex_vat, vat_amount, gross_profit, food_cost_percent,
+    gp_percent, weekly_sales, weekly_revenue_ex_vat, weekly_gp.
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT mi.id, mi.recipe_id, mi.menu_selling_price, mi.estimated_weekly_sales,
+               mi.notes, mi.sort_order,
+               r.name as recipe_name, r.selling_price as recipe_selling_price,
+               r.vat_rate, r.is_takeaway_cold,
+               COALESCE(SUM(ri.quantity * i.cost), 0) as ingredient_cost
+        FROM menu_items mi
+        JOIN recipes r ON r.id = mi.recipe_id
+        LEFT JOIN recipe_ingredients ri ON ri.recipe_id = r.id
+        LEFT JOIN items i ON i.id = ri.inventory_item_id
+        WHERE mi.menu_id = %s AND r.organization_id = %s
+        GROUP BY mi.id, mi.recipe_id, mi.menu_selling_price, mi.estimated_weekly_sales,
+                 mi.notes, mi.sort_order, r.name, r.selling_price, r.vat_rate, r.is_takeaway_cold
+        ORDER BY mi.sort_order, r.name
+    ''', (menu_id, org_id))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    results = []
+    for r in rows:
+        cost = float(r['ingredient_cost'] or 0)
+        # Use menu override if set, otherwise recipe's default
+        price_inc_vat = float(r['menu_selling_price']) if r['menu_selling_price'] is not None else float(r['recipe_selling_price'] or 0)
+        vat_rate = float(r['vat_rate'] if r['vat_rate'] is not None else 20)
+        # Strip VAT to get the ex-VAT price
+        if vat_rate > 0:
+            price_ex_vat = price_inc_vat / (1 + vat_rate / 100)
+        else:
+            price_ex_vat = price_inc_vat
+        vat_amount = price_inc_vat - price_ex_vat
+        gross_profit = price_ex_vat - cost
+        food_cost_percent = (cost / price_ex_vat * 100) if price_ex_vat > 0 else 0
+        gp_percent = (gross_profit / price_ex_vat * 100) if price_ex_vat > 0 else 0
+        weekly_sales = int(r['estimated_weekly_sales'] or 0)
+        weekly_revenue_ex_vat = price_ex_vat * weekly_sales
+        weekly_gp = gross_profit * weekly_sales
+
+        results.append({
+            'id': r['id'],
+            'recipe_id': r['recipe_id'],
+            'recipe_name': r['recipe_name'],
+            'ingredient_cost': cost,
+            'selling_price_inc_vat': price_inc_vat,
+            'selling_price_ex_vat': price_ex_vat,
+            'vat_rate': vat_rate,
+            'vat_amount': vat_amount,
+            'is_takeaway_cold': r['is_takeaway_cold'],
+            'gross_profit': gross_profit,
+            'food_cost_percent': food_cost_percent,
+            'gp_percent': gp_percent,
+            'weekly_sales': weekly_sales,
+            'weekly_revenue_ex_vat': weekly_revenue_ex_vat,
+            'weekly_gp': weekly_gp,
+            'notes': r['notes'],
+            'sort_order': r['sort_order'],
+            'is_using_override': r['menu_selling_price'] is not None,
+        })
+    return results
+
+
+@app.route('/menus')
+@login_required
+def menus():
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT m.*, COUNT(mi.id) as item_count
+            FROM menus m
+            LEFT JOIN menu_items mi ON mi.menu_id = m.id
+            WHERE m.organization_id = %s
+            GROUP BY m.id
+            ORDER BY m.is_active DESC, m.name
+        ''', (org_id,))
+        all_menus = cur.fetchall()
+        cur.close()
+        conn.close()
+        return render_template('menus.html', menus=all_menus)
+    except Exception as e:
+        print(f"Menus list error: {e}")
+        traceback.print_exc()
+        return f"Error loading menus: {str(e)}", 500
+
+
+@app.route('/menus/new', methods=['GET', 'POST'])
+@login_required
+def menu_new():
+    if request.method == 'GET':
+        return render_template('menu_form.html', menu=None)
+    try:
+        org_id = get_current_org_id()
+        name = request.form.get('name', '').strip()
+        if not name:
+            flash('Menu name is required.', 'danger')
+            return redirect('/menus/new')
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO menus (organization_id, name, description, is_active)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+        ''', (org_id, name,
+              request.form.get('description', '').strip() or None,
+              request.form.get('is_active') == 'on'))
+        new_id = cur.fetchone()['id']
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash(f"Menu '{name}' created.", 'success')
+        return redirect(f'/menus/{new_id}')
+    except Exception as e:
+        print(f"Menu new error: {e}")
+        traceback.print_exc()
+        flash('Error creating menu.', 'danger')
+        return redirect('/menus')
+
+
+@app.route('/menus/<int:menu_id>')
+@login_required
+def menu_detail(menu_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM menus WHERE id = %s AND organization_id = %s', (menu_id, org_id))
+        menu = cur.fetchone()
+        if not menu:
+            cur.close()
+            conn.close()
+            flash('Menu not found.', 'danger')
+            return redirect('/menus')
+
+        # Recipes already on this menu
+        cur.execute('SELECT recipe_id FROM menu_items WHERE menu_id = %s', (menu_id,))
+        existing_ids = {r['recipe_id'] for r in cur.fetchall()}
+
+        # Recipes available to add (not already on the menu)
+        cur.execute('''
+            SELECT id, name, category, selling_price
+            FROM recipes
+            WHERE organization_id = %s
+            ORDER BY name
+        ''', (org_id,))
+        all_recipes = cur.fetchall()
+        available = [r for r in all_recipes if r['id'] not in existing_ids]
+
+        cur.close()
+        conn.close()
+
+        items = _menu_costing(menu_id, org_id)
+
+        # Menu summary
+        total_weekly_revenue = sum(i['weekly_revenue_ex_vat'] for i in items)
+        total_weekly_gp = sum(i['weekly_gp'] for i in items)
+        items_with_sales = [i for i in items if i['weekly_sales'] > 0]
+        avg_gp_pct_weighted = (total_weekly_gp / total_weekly_revenue * 100) if total_weekly_revenue > 0 else 0
+        avg_gp_pct_simple = (sum(i['gp_percent'] for i in items) / len(items)) if items else 0
+
+        return render_template('menu_detail.html',
+                               menu=menu,
+                               items=items,
+                               available_recipes=available,
+                               item_count=len(items),
+                               total_weekly_revenue=total_weekly_revenue,
+                               total_weekly_gp=total_weekly_gp,
+                               avg_gp_pct_weighted=avg_gp_pct_weighted,
+                               avg_gp_pct_simple=avg_gp_pct_simple)
+    except Exception as e:
+        print(f"Menu detail error: {e}")
+        traceback.print_exc()
+        return f"Error loading menu: {str(e)}", 500
+
+
+@app.route('/menus/<int:menu_id>/edit', methods=['GET', 'POST'])
+@login_required
+def menu_edit(menu_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        if request.method == 'POST':
+            cur.execute('''
+                UPDATE menus
+                SET name = %s, description = %s, is_active = %s, updated_at = NOW()
+                WHERE id = %s AND organization_id = %s
+            ''', (
+                request.form.get('name', '').strip(),
+                request.form.get('description', '').strip() or None,
+                request.form.get('is_active') == 'on',
+                menu_id, org_id
+            ))
+            conn.commit()
+            cur.close()
+            conn.close()
+            flash('Menu updated.', 'success')
+            return redirect(f'/menus/{menu_id}')
+
+        cur.execute('SELECT * FROM menus WHERE id = %s AND organization_id = %s', (menu_id, org_id))
+        menu = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not menu:
+            flash('Menu not found.', 'danger')
+            return redirect('/menus')
+        return render_template('menu_form.html', menu=menu)
+    except Exception as e:
+        print(f"Menu edit error: {e}")
+        traceback.print_exc()
+        flash('Error editing menu.', 'danger')
+        return redirect('/menus')
+
+
+@app.route('/menus/<int:menu_id>/delete', methods=['POST'])
+@login_required
+def menu_delete(menu_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM menus WHERE id = %s AND organization_id = %s', (menu_id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Menu deleted.', 'success')
+    except Exception as e:
+        print(f"Menu delete error: {e}")
+        flash('Error deleting menu.', 'danger')
+    return redirect('/menus')
+
+
+@app.route('/menus/<int:menu_id>/add-recipe', methods=['POST'])
+@login_required
+def menu_add_recipe(menu_id):
+    try:
+        org_id = get_current_org_id()
+        recipe_id = request.form.get('recipe_id')
+        if not recipe_id:
+            flash('Pick a recipe to add.', 'danger')
+            return redirect(f'/menus/{menu_id}')
+        conn = get_db()
+        cur = conn.cursor()
+        # Verify both belong to this org
+        cur.execute('SELECT id FROM menus WHERE id = %s AND organization_id = %s', (menu_id, org_id))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            flash('Menu not found.', 'danger')
+            return redirect('/menus')
+        cur.execute('SELECT id FROM recipes WHERE id = %s AND organization_id = %s', (recipe_id, org_id))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            flash('Recipe not found.', 'danger')
+            return redirect(f'/menus/{menu_id}')
+        # Insert (ignore duplicate)
+        cur.execute('''
+            INSERT INTO menu_items (menu_id, recipe_id, sort_order)
+            VALUES (%s, %s, COALESCE((SELECT MAX(sort_order) + 1 FROM menu_items WHERE menu_id = %s), 0))
+            ON CONFLICT (menu_id, recipe_id) DO NOTHING
+        ''', (menu_id, recipe_id, menu_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Recipe added to menu.', 'success')
+    except Exception as e:
+        print(f"Menu add recipe error: {e}")
+        traceback.print_exc()
+        flash('Error adding recipe to menu.', 'danger')
+    return redirect(f'/menus/{menu_id}')
+
+
+@app.route('/menus/<int:menu_id>/items/<int:item_id>/update', methods=['POST'])
+@login_required
+def menu_item_update(menu_id, item_id):
+    """Update menu-specific fields on a menu item: override price, weekly sales, notes."""
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        # Verify ownership via the menu
+        cur.execute('SELECT id FROM menus WHERE id = %s AND organization_id = %s', (menu_id, org_id))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            flash('Menu not found.', 'danger')
+            return redirect('/menus')
+
+        # Parse the optional override price (blank = use recipe default)
+        price_str = request.form.get('menu_selling_price', '').strip()
+        if price_str:
+            try:
+                menu_price = float(price_str)
+            except ValueError:
+                menu_price = None
+        else:
+            menu_price = None
+
+        weekly_sales_str = request.form.get('estimated_weekly_sales', '').strip()
+        weekly_sales = int(weekly_sales_str) if weekly_sales_str.isdigit() else 0
+
+        cur.execute('''
+            UPDATE menu_items
+            SET menu_selling_price = %s,
+                estimated_weekly_sales = %s,
+                notes = %s
+            WHERE id = %s AND menu_id = %s
+        ''', (menu_price, weekly_sales,
+              request.form.get('notes', '').strip() or None,
+              item_id, menu_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Menu item updated.', 'success')
+    except Exception as e:
+        print(f"Menu item update error: {e}")
+        traceback.print_exc()
+        flash('Error updating item.', 'danger')
+    return redirect(f'/menus/{menu_id}')
+
+
+@app.route('/menus/<int:menu_id>/items/<int:item_id>/remove', methods=['POST'])
+@login_required
+def menu_item_remove(menu_id, item_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT id FROM menus WHERE id = %s AND organization_id = %s', (menu_id, org_id))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            flash('Menu not found.', 'danger')
+            return redirect('/menus')
+        cur.execute('DELETE FROM menu_items WHERE id = %s AND menu_id = %s', (item_id, menu_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Recipe removed from menu.', 'success')
+    except Exception as e:
+        print(f"Menu item remove error: {e}")
+        flash('Error removing item.', 'danger')
+    return redirect(f'/menus/{menu_id}')
+
+
 @app.route('/recipes/delete/<int:id>')
 @login_required
 def delete_recipe(id):
