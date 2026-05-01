@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menus - YieldGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+    <style>
+        .menu-card {
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-radius: 12px;
+            padding: 18px 20px;
+            margin-bottom: 12px;
+            text-decoration: none;
+            color: #0A0A0A;
+            display: block;
+            transition: border-color 0.15s, transform 0.15s;
+        }
+        .menu-card:hover {
+            border-color: #4A6B45;
+            transform: translateY(-1px);
+            color: #0A0A0A;
+        }
+        .menu-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+        }
+        .menu-card-title {
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            letter-spacing: -0.015em;
+        }
+        .menu-card-meta {
+            font-size: 13px;
+            color: #6B6860;
+        }
+        .pill {
+            display: inline-block;
+            padding: 2px 9px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .pill-active { background: #EEF1ED; color: #2D4128; }
+        .pill-inactive { background: #F4F2EC; color: #6B6860; }
+        .empty-state {
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-radius: 12px;
+            padding: 50px 20px;
+            text-align: center;
+            color: #6B6860;
+        }
+        .empty-state h3 { color: #0A0A0A; margin-bottom: 8px; font-size: 17px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo"><span class="logo-icon">🍳</span><span>YieldGuard</span></a>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/recipes">Recipes</a>
+                <a href="/menus" class="active">Menus</a>
+                <a href="/haccp">HACCP</a>
+                <a href="/alerts">Alerts</a>
+                <a href="/logout">Logout</a>
+            </div>
+            <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+        <div class="mobile-menu" id="mobileMenu">
+            <a href="/">Dashboard</a>
+            <a href="/inventory">Inventory</a>
+            <a href="/recipes">Recipes</a>
+            <a href="/menus" class="active">Menus</a>
+            <a href="/haccp">HACCP</a>
+            <a href="/alerts">Alerts</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+            <div>
+                <p class="page-eyebrow">Menu planning</p>
+                <h1>📋 Menus</h1>
+                <p class="page-subtitle">Group recipes into menus, see GP%, plan revenue.</p>
+            </div>
+            <div>
+                <a href="/menus/new" class="btn">+ New menu</a>
+            </div>
+        </div>
+
+        {% if menus and menus|length > 0 %}
+            {% for m in menus %}
+            <a href="/menus/{{ m.id }}" class="menu-card">
+                <div class="menu-card-header">
+                    <div>
+                        <div class="menu-card-title">{{ m.name }}</div>
+                        <div class="menu-card-meta">
+                            {{ m.item_count }} {{ 'recipe' if m.item_count == 1 else 'recipes' }}
+                            {% if m.description %} · {{ m.description }}{% endif %}
+                        </div>
+                    </div>
+                    <span class="pill {% if m.is_active %}pill-active{% else %}pill-inactive{% endif %}">
+                        {% if m.is_active %}Active{% else %}Draft{% endif %}
+                    </span>
+                </div>
+            </a>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <h3>No menus yet</h3>
+                <p>Create your first menu — group recipes together and see GP% across the whole thing.</p>
+                <p style="margin-top: 16px;"><a href="/menus/new" class="btn">+ Create first menu</a></p>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>
