@@ -769,11 +769,18 @@ def edit_recipe(id):
         cur = conn.cursor()
 
         if request.method == 'POST':
+            # Parse VAT rate (default 20.00 for hot food)
+            try:
+                vat_rate_val = float(request.form.get('vat_rate', '20'))
+            except ValueError:
+                vat_rate_val = 20.00
             cur.execute('''
                 UPDATE recipes
                 SET name = %s, category = %s, selling_price = %s,
                     portion_size = %s, servings = %s,
-                    instructions = %s, notes = %s, updated_at = %s
+                    instructions = %s, notes = %s,
+                    vat_rate = %s, is_takeaway_cold = %s,
+                    updated_at = %s
                 WHERE id = %s AND organization_id = %s
             ''', (
                 request.form['name'],
@@ -783,6 +790,8 @@ def edit_recipe(id):
                 int(request.form['servings']) if request.form.get('servings') else 1,
                 request.form.get('instructions', ''),
                 request.form.get('notes', ''),
+                vat_rate_val,
+                request.form.get('is_takeaway_cold') == 'on',
                 datetime.now(),
                 id,
                 org_id
@@ -1332,6 +1341,236 @@ def menu_item_remove(menu_id, item_id):
         print(f"Menu item remove error: {e}")
         flash('Error removing item.', 'danger')
     return redirect(f'/menus/{menu_id}')
+
+
+@app.route('/menus/<int:menu_id>/items/<int:item_id>/move', methods=['POST'])
+@login_required
+def menu_item_move(menu_id, item_id):
+    """Move a menu item up or down in the order. direction = 'up' or 'down'."""
+    try:
+        org_id = get_current_org_id()
+        direction = request.form.get('direction', 'up')
+        conn = get_db()
+        cur = conn.cursor()
+        # Verify menu ownership
+        cur.execute('SELECT id FROM menus WHERE id = %s AND organization_id = %s', (menu_id, org_id))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            return redirect('/menus')
+
+        # Fetch all items ordered
+        cur.execute('SELECT id, sort_order FROM menu_items WHERE menu_id = %s ORDER BY sort_order, id', (menu_id,))
+        rows = cur.fetchall()
+        # Find target index
+        idx = next((i for i, r in enumerate(rows) if r['id'] == item_id), None)
+        if idx is None:
+            cur.close()
+            conn.close()
+            return redirect(f'/menus/{menu_id}')
+
+        if direction == 'up' and idx > 0:
+            swap_with = idx - 1
+        elif direction == 'down' and idx < len(rows) - 1:
+            swap_with = idx + 1
+        else:
+            cur.close()
+            conn.close()
+            return redirect(f'/menus/{menu_id}')
+
+        # Re-number all items so sort_order is contiguous, then swap
+        new_order = list(range(len(rows)))
+        new_order[idx], new_order[swap_with] = new_order[swap_with], new_order[idx]
+        for new_pos, original_idx in enumerate(new_order):
+            cur.execute('UPDATE menu_items SET sort_order = %s WHERE id = %s',
+                        (new_pos, rows[original_idx]['id']))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Menu item move error: {e}")
+        traceback.print_exc()
+    return redirect(f'/menus/{menu_id}')
+
+
+@app.route('/menus/<int:menu_id>/report.pdf')
+@login_required
+def menu_report_pdf(menu_id):
+    """Generate a printable menu costing report (PDF)."""
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM menus WHERE id = %s AND organization_id = %s', (menu_id, org_id))
+        menu = cur.fetchone()
+        if not menu:
+            cur.close()
+            conn.close()
+            flash('Menu not found.', 'danger')
+            return redirect('/menus')
+        org = _get_org(cur, org_id)
+        cur.close()
+        conn.close()
+
+        items = _menu_costing(menu_id, org_id)
+
+        # Build PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4,
+                                topMargin=15*mm, bottomMargin=15*mm,
+                                leftMargin=15*mm, rightMargin=15*mm)
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('title', parent=styles['Title'],
+                                      fontSize=18, textColor=colors.HexColor('#0A0A0A'),
+                                      alignment=TA_LEFT, spaceAfter=6)
+        h2_style = ParagraphStyle('h2', parent=styles['Heading2'],
+                                   fontSize=13, textColor=colors.HexColor('#0A0A0A'),
+                                   spaceBefore=12, spaceAfter=8)
+        body_style = ParagraphStyle('body', parent=styles['BodyText'],
+                                     fontSize=10, textColor=colors.HexColor('#3A3A3A'))
+        small_style = ParagraphStyle('small', parent=styles['BodyText'],
+                                      fontSize=9, textColor=colors.HexColor('#6B6860'))
+
+        story = []
+        # Header
+        biz_name = (org.get('business_name') if org else None) or 'Food Business'
+        story.append(Paragraph(biz_name, ParagraphStyle('biz', fontSize=11,
+                                                         textColor=colors.HexColor('#6B6860'),
+                                                         spaceAfter=2)))
+        story.append(Paragraph(f"Menu costing report — {menu['name']}", title_style))
+        if menu.get('description'):
+            story.append(Paragraph(menu['description'], small_style))
+        story.append(Paragraph(f"Generated {datetime.now().strftime('%d %B %Y · %H:%M')}", small_style))
+        story.append(Spacer(1, 6*mm))
+
+        # Summary stats
+        total_revenue = sum(i['weekly_revenue_ex_vat'] for i in items)
+        total_gp = sum(i['weekly_gp'] for i in items)
+        weighted_gp_pct = (total_gp / total_revenue * 100) if total_revenue > 0 else 0
+        avg_simple = (sum(i['gp_percent'] for i in items) / len(items)) if items else 0
+
+        summary_data = [
+            ['Recipes on menu', str(len(items))],
+            ['Average GP% (simple)', f"{avg_simple:.1f}%"],
+        ]
+        if total_revenue > 0:
+            summary_data.extend([
+                ['Forecast weekly revenue (ex-VAT)', f"£{total_revenue:.2f}"],
+                ['Forecast weekly gross profit', f"£{total_gp:.2f}"],
+                ['Weighted GP%', f"{weighted_gp_pct:.1f}%"],
+            ])
+        summary_table = Table(summary_data, colWidths=[80*mm, 60*mm])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#FAFAF7')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#0A0A0A')),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#E8E5DD')),
+            ('FONTNAME', (1, 0), (1, -1), 'Helvetica-Bold'),
+        ]))
+        story.append(summary_table)
+        story.append(Spacer(1, 4*mm))
+
+        story.append(Paragraph("UK industry targets: healthy GP is 65–72% (food cost 28–35%). "
+                                "Below 50% GP indicates loss-making dishes.", small_style))
+        story.append(Spacer(1, 4*mm))
+
+        # Per-dish costing table
+        story.append(Paragraph('Per-dish costing', h2_style))
+        if items:
+            header = ['Recipe', 'Cost', 'Sell ex-VAT', 'VAT', 'Sell inc-VAT', 'GP £', 'GP%']
+            data = [header]
+            for it in items:
+                gp_str = f"{it['gp_percent']:.1f}%" if it['gp_percent'] > 0 else '—'
+                data.append([
+                    it['recipe_name'],
+                    f"£{it['ingredient_cost']:.2f}",
+                    f"£{it['selling_price_ex_vat']:.2f}",
+                    f"{it['vat_rate']:.0f}%",
+                    f"£{it['selling_price_inc_vat']:.2f}",
+                    f"£{it['gross_profit']:.2f}",
+                    gp_str,
+                ])
+            costing_table = Table(data, colWidths=[55*mm, 18*mm, 22*mm, 14*mm, 22*mm, 18*mm, 18*mm])
+            ts = TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0A0A0A')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#D6D2C7')),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ])
+            # Colour-code the GP% column
+            for i, it in enumerate(items, start=1):
+                if it['gp_percent'] >= 65:
+                    ts.add('BACKGROUND', (6, i), (6, i), colors.HexColor('#EEF1ED'))
+                    ts.add('TEXTCOLOR', (6, i), (6, i), colors.HexColor('#2D4128'))
+                elif it['gp_percent'] >= 50:
+                    ts.add('BACKGROUND', (6, i), (6, i), colors.HexColor('#FEF6E7'))
+                    ts.add('TEXTCOLOR', (6, i), (6, i), colors.HexColor('#78350F'))
+                elif it['gp_percent'] > 0:
+                    ts.add('BACKGROUND', (6, i), (6, i), colors.HexColor('#FBEDED'))
+                    ts.add('TEXTCOLOR', (6, i), (6, i), colors.HexColor('#5A1F1F'))
+            costing_table.setStyle(ts)
+            story.append(costing_table)
+        else:
+            story.append(Paragraph('No recipes on this menu yet.', body_style))
+
+        # Sales forecasting (only if any sales numbers entered)
+        items_with_sales = [i for i in items if i['weekly_sales'] > 0]
+        if items_with_sales:
+            story.append(Spacer(1, 6*mm))
+            story.append(Paragraph('Weekly sales forecast', h2_style))
+            forecast_data = [['Recipe', 'Sold/wk', 'Revenue ex-VAT', 'GP £']]
+            for it in items_with_sales:
+                forecast_data.append([
+                    it['recipe_name'],
+                    str(it['weekly_sales']),
+                    f"£{it['weekly_revenue_ex_vat']:.2f}",
+                    f"£{it['weekly_gp']:.2f}",
+                ])
+            forecast_data.append(['TOTAL', '',
+                                   f"£{total_revenue:.2f}",
+                                   f"£{total_gp:.2f}"])
+            forecast_table = Table(forecast_data, colWidths=[80*mm, 22*mm, 35*mm, 30*mm])
+            forecast_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0A0A0A')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#EEF1ED')),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#D6D2C7')),
+            ]))
+            story.append(forecast_table)
+
+        # Footer
+        story.append(Spacer(1, 8*mm))
+        story.append(Paragraph('All figures shown ex-VAT for proper margin analysis. Cost based on current ingredient prices in inventory.', small_style))
+        if org and org.get('food_business_registration'):
+            story.append(Paragraph(f"FBO: {org['food_business_registration']}", small_style))
+
+        doc.build(story)
+        buffer.seek(0)
+
+        # Sanitise menu name for filename
+        safe_name = ''.join(c if c.isalnum() else '-' for c in menu['name']).lower().strip('-')
+        filename = f"menu-{safe_name}-{datetime.now().strftime('%Y-%m-%d')}.pdf"
+        return _send_pdf(buffer, filename)
+    except Exception as e:
+        print(f"Menu PDF error: {e}")
+        traceback.print_exc()
+        flash('Error generating PDF.', 'danger')
+        return redirect(f'/menus/{menu_id}')
 
 
 @app.route('/recipes/delete/<int:id>')
