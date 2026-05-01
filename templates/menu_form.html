@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if menu %}Edit{% else %}New{% endif %} Menu - YieldGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+    <style>
+        .toggle-row {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 10px 12px;
+            border: 1px solid #E8E5DD;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        .toggle-row input { margin-top: 3px; cursor: pointer; }
+        .toggle-row:has(input:checked) { background: #EEF1ED; border-color: #4A6B45; }
+        .toggle-text { flex: 1; }
+        .toggle-title { font-weight: 600; font-size: 14px; }
+        .toggle-help { font-size: 12px; color: #6B6860; margin-top: 2px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo"><span class="logo-icon">🍳</span><span>YieldGuard</span></a>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/recipes">Recipes</a>
+                <a href="/menus" class="active">Menus</a>
+                <a href="/haccp">HACCP</a>
+                <a href="/alerts">Alerts</a>
+                <a href="/logout">Logout</a>
+            </div>
+            <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+        <div class="mobile-menu" id="mobileMenu">
+            <a href="/">Dashboard</a>
+            <a href="/inventory">Inventory</a>
+            <a href="/recipes">Recipes</a>
+            <a href="/menus" class="active">Menus</a>
+            <a href="/haccp">HACCP</a>
+            <a href="/alerts">Alerts</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container-narrow">
+        {% if menu %}
+            <a href="/menus/{{ menu.id }}" class="back-link">← Back to {{ menu.name }}</a>
+        {% else %}
+            <a href="/menus" class="back-link">← Back to Menus</a>
+        {% endif %}
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-header">
+            <p class="page-eyebrow">Menu planning</p>
+            <h1>{% if menu %}Edit menu{% else %}New menu{% endif %}</h1>
+        </div>
+
+        <form action="{% if menu %}/menus/{{ menu.id }}/edit{% else %}/menus/new{% endif %}" method="POST">
+            <div class="card">
+                <h2>Details</h2>
+                <div class="form-grid">
+                    <div class="form-group full">
+                        <label>Menu name *</label>
+                        <input type="text" name="name" required value="{{ menu.name if menu else '' }}" placeholder="e.g. Lunch menu, Sunday roast, Christmas 2026">
+                    </div>
+                    <div class="form-group full">
+                        <label>Description</label>
+                        <textarea name="description" rows="2" placeholder="Optional — what this menu is, when it runs, etc.">{{ menu.description if menu and menu.description else '' }}</textarea>
+                    </div>
+                </div>
+
+                <label class="toggle-row" style="margin-top: 14px;">
+                    <input type="checkbox" name="is_active" {% if not menu or menu.is_active %}checked{% endif %}>
+                    <div class="toggle-text">
+                        <div class="toggle-title">Active menu</div>
+                        <div class="toggle-help">Active menus are highlighted on the menus list. Untick to mark as draft.</div>
+                    </div>
+                </label>
+            </div>
+
+            <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px;">
+                <a href="{% if menu %}/menus/{{ menu.id }}{% else %}/menus{% endif %}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn">{% if menu %}Save changes{% else %}Create menu{% endif %}</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
