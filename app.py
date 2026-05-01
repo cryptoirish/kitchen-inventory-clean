@@ -1686,6 +1686,60 @@ def get_compliance_alerts(org_id):
             'link': '/inventory',
         })
 
+    # 7. Pest control — overdue contractor visits
+    cur.execute('''
+        SELECT contractor_name, last_visit_date, next_visit_due, visit_frequency_days, has_contract
+        FROM haccp_pest_contract WHERE organization_id = %s
+    ''', (org_id,))
+    pest_contract = cur.fetchone()
+    if pest_contract:
+        if pest_contract.get('has_contract') and pest_contract.get('next_visit_due'):
+            days_overdue = (datetime.now().date() - pest_contract['next_visit_due']).days
+            if days_overdue > 0:
+                severity = 'critical' if days_overdue > 14 else 'warning'
+                alerts[severity].append({
+                    'type': 'pest_visit_overdue',
+                    'severity': severity,
+                    'title': f"Pest control visit overdue by {days_overdue} day{'s' if days_overdue != 1 else ''}",
+                    'detail': f"Last visit: {pest_contract['last_visit_date'].strftime('%d %b %Y') if pest_contract.get('last_visit_date') else 'unknown'}",
+                    'link': '/haccp/pest-control',
+                })
+        elif pest_contract.get('has_contract') and not pest_contract.get('last_visit_date'):
+            alerts['info'].append({
+                'type': 'pest_no_visits',
+                'severity': 'info',
+                'title': 'Pest control contract set up but no visits logged',
+                'detail': 'Log your first visit to start the audit trail.',
+                'link': '/haccp/pest-control',
+            })
+
+    # 8. Pest control — unresolved sightings
+    cur.execute('''
+        SELECT pest_type, sighted_at, severity, location
+        FROM haccp_pest_sightings
+        WHERE organization_id = %s AND is_resolved = false
+        ORDER BY sighted_at ASC
+    ''', (org_id,))
+    open_sightings = cur.fetchall()
+    for s in open_sightings:
+        days_open = (datetime.now() - s['sighted_at']).days if s['sighted_at'] else 0
+        if s['severity'] == 'high' or days_open > 3:
+            alerts['critical'].append({
+                'type': 'pest_sighting_open',
+                'severity': 'critical',
+                'title': f"Open pest sighting: {s['pest_type']}{' (' + s['location'] + ')' if s['location'] else ''}",
+                'detail': f"Reported {days_open} day{'s' if days_open != 1 else ''} ago — needs resolving.",
+                'link': '/haccp/pest-control',
+            })
+        else:
+            alerts['warning'].append({
+                'type': 'pest_sighting_open',
+                'severity': 'warning',
+                'title': f"Open pest sighting: {s['pest_type']}{' (' + s['location'] + ')' if s['location'] else ''}",
+                'detail': f"Reported {days_open} day{'s' if days_open != 1 else ''} ago.",
+                'link': '/haccp/pest-control',
+            })
+
     cur.close()
     conn.close()
     return alerts
