@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ menu.name }} - YieldGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+    <style>
+        .stat-tinted { border: none; padding: 16px; border-radius: 12px; }
+        .stat-tinted .stat-label { text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; }
+        .stat-tint-sage { background: #EEF1ED; }
+        .stat-tint-sage .stat-label { color: #2D4128; }
+        .stat-tint-amber { background: #FEF6E7; }
+        .stat-tint-amber .stat-label { color: #78350F; }
+        .stat-tint-blue { background: #E8F0F7; }
+        .stat-tint-blue .stat-label { color: #133E5F; }
+        .stat-tint-maroon { background: #FBEDED; }
+        .stat-tint-maroon .stat-label { color: #5A1F1F; }
+
+        .section-heading-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin: 28px 0 12px;
+        }
+        .section-heading-row h2 {
+            font-size: 12px;
+            font-weight: 600;
+            color: #6B6860;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 0;
+        }
+
+        .item-card {
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-left: 4px solid #9C988D;
+            border-radius: 12px;
+            padding: 16px 18px;
+            margin-bottom: 12px;
+        }
+        .item-card.gp-good { border-left-color: #4A6B45; }
+        .item-card.gp-ok { border-left-color: #B45309; }
+        .item-card.gp-bad { border-left-color: #7C2D2D; }
+
+        .item-row-1 {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .item-name { font-size: 16px; font-weight: 600; }
+        .item-name a { color: #0A0A0A; text-decoration: none; }
+        .item-name a:hover { color: #4A6B45; }
+
+        .gp-pill {
+            display: inline-block;
+            padding: 4px 11px;
+            border-radius: 14px;
+            font-size: 13px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+        .gp-pill.good { background: #EEF1ED; color: #2D4128; }
+        .gp-pill.ok { background: #FEF6E7; color: #78350F; }
+        .gp-pill.bad { background: #FBEDED; color: #5A1F1F; }
+        .gp-pill.none { background: #F4F2EC; color: #6B6860; }
+
+        .cost-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            background: #FAFAF7;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        @media (max-width: 600px) {
+            .cost-grid { grid-template-columns: 1fr 1fr; }
+        }
+        .cost-cell {
+            text-align: center;
+        }
+        .cost-cell-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6B6860;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        .cost-cell-value {
+            font-size: 14px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+        .cost-cell-value.cost { color: #7C2D2D; }
+        .cost-cell-value.profit { color: #2D4128; }
+
+        .item-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 8px;
+            align-items: end;
+        }
+        @media (max-width: 600px) {
+            .item-controls { grid-template-columns: 1fr 1fr; }
+            .item-controls .control-actions { grid-column: span 2; display: flex; gap: 6px; }
+        }
+        .control-actions { display: flex; gap: 6px; }
+
+        .item-controls label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6B6860;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 3px;
+        }
+        .item-controls input {
+            padding: 6px 9px;
+            font-size: 13px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .vat-tag {
+            display: inline-block;
+            font-size: 10px;
+            padding: 1px 6px;
+            background: #F4F2EC;
+            color: #6B6860;
+            border-radius: 4px;
+            margin-left: 4px;
+            font-weight: 500;
+        }
+        .override-tag {
+            display: inline-block;
+            font-size: 10px;
+            padding: 1px 6px;
+            background: #E8F0F7;
+            color: #133E5F;
+            border-radius: 4px;
+            margin-left: 4px;
+            font-weight: 500;
+        }
+
+        .empty-state {
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            color: #6B6860;
+        }
+        .empty-state h3 { color: #0A0A0A; margin-bottom: 8px; }
+
+        .add-recipe-card {
+            background: #FAFAF7;
+            border: 1px dashed #D6D2C7;
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 16px;
+        }
+        .add-recipe-card form {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+        }
+        .add-recipe-card .form-group {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .menu-meta {
+            display: flex;
+            gap: 14px;
+            font-size: 13px;
+            color: #6B6860;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+        .menu-meta strong { color: #0A0A0A; }
+
+        .pill {
+            display: inline-block;
+            padding: 2px 9px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .pill-active { background: #EEF1ED; color: #2D4128; }
+        .pill-inactive { background: #F4F2EC; color: #6B6860; }
+
+        .targets-note {
+            background: #F4F2EC;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 12.5px;
+            color: #4A4842;
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+        .targets-note strong { color: #0A0A0A; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo"><span class="logo-icon">🍳</span><span>YieldGuard</span></a>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/recipes">Recipes</a>
+                <a href="/menus" class="active">Menus</a>
+                <a href="/haccp">HACCP</a>
+                <a href="/alerts">Alerts</a>
+                <a href="/logout">Logout</a>
+            </div>
+            <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+        <div class="mobile-menu" id="mobileMenu">
+            <a href="/">Dashboard</a>
+            <a href="/inventory">Inventory</a>
+            <a href="/recipes">Recipes</a>
+            <a href="/menus" class="active">Menus</a>
+            <a href="/haccp">HACCP</a>
+            <a href="/alerts">Alerts</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <a href="/menus" class="back-link">← Back to Menus</a>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+            <div>
+                <p class="page-eyebrow">Menu</p>
+                <h1>📋 {{ menu.name }}
+                    <span class="pill {% if menu.is_active %}pill-active{% else %}pill-inactive{% endif %}" style="vertical-align: middle; margin-left: 6px; font-size: 11px;">
+                        {% if menu.is_active %}Active{% else %}Draft{% endif %}
+                    </span>
+                </h1>
+                {% if menu.description %}<p class="page-subtitle">{{ menu.description }}</p>{% endif %}
+                <div class="menu-meta">
+                    <span><strong>{{ item_count }}</strong> recipe{% if item_count != 1 %}s{% endif %}</span>
+                    {% if avg_gp_pct_simple > 0 %}<span>Avg GP: <strong>{{ "%.1f"|format(avg_gp_pct_simple) }}%</strong></span>{% endif %}
+                </div>
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <a href="/menus/{{ menu.id }}/edit" class="btn btn-secondary">Edit details</a>
+                <form action="/menus/{{ menu.id }}/delete" method="POST" onsubmit="return confirm('Delete this menu? Recipes will not be deleted.');" style="display: inline;">
+                    <button type="submit" class="btn btn-secondary" style="color: #7C2D2D;">Delete</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Summary stats (only when there are items with sales) -->
+        {% if total_weekly_revenue > 0 %}
+        <div class="stat-grid">
+            <div class="stat stat-tinted stat-tint-sage">
+                <div class="stat-label">Forecast weekly GP</div>
+                <div class="stat-value">£{{ "%.0f"|format(total_weekly_gp) }}</div>
+            </div>
+            <div class="stat stat-tinted stat-tint-blue">
+                <div class="stat-label">Forecast weekly revenue</div>
+                <div class="stat-value">£{{ "%.0f"|format(total_weekly_revenue) }}</div>
+            </div>
+            <div class="stat stat-tinted stat-tint-{% if avg_gp_pct_weighted >= 65 %}sage{% elif avg_gp_pct_weighted >= 50 %}amber{% else %}maroon{% endif %}">
+                <div class="stat-label">Weighted GP%</div>
+                <div class="stat-value">{{ "%.1f"|format(avg_gp_pct_weighted) }}%</div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="targets-note">
+            <strong>UK food industry targets:</strong> healthy GP is 65–72% (food cost 28–35%). 
+            Below 50% GP usually means losing money. All figures are <strong>ex-VAT</strong> for proper margin analysis.
+        </div>
+
+        <!-- Add a recipe -->
+        {% if available_recipes and available_recipes|length > 0 %}
+        <div class="add-recipe-card">
+            <form action="/menus/{{ menu.id }}/add-recipe" method="POST">
+                <div class="form-group">
+                    <label>Add a recipe to this menu</label>
+                    <select name="recipe_id" required>
+                        <option value="">-- Pick a recipe --</option>
+                        {% for r in available_recipes %}
+                        <option value="{{ r.id }}">{{ r.name }}{% if r.category %} ({{ r.category }}){% endif %} — £{{ "%.2f"|format(r.selling_price or 0) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn">+ Add to menu</button>
+            </form>
+        </div>
+        {% elif item_count == 0 %}
+        <div class="empty-state">
+            <h3>No recipes yet</h3>
+            <p>Create some recipes first, then come back here to group them into a menu.</p>
+            <p style="margin-top: 14px;"><a href="/recipes/add" class="btn">+ Create a recipe</a></p>
+        </div>
+        {% endif %}
+
+        <!-- Menu items -->
+        {% if items and items|length > 0 %}
+        <div class="section-heading-row">
+            <h2>Recipes on this menu</h2>
+        </div>
+
+        {% for item in items %}
+        {% set gp_class = 'good' if item.gp_percent >= 65 else ('ok' if item.gp_percent >= 50 else ('bad' if item.gp_percent > 0 else 'none')) %}
+        <div class="item-card gp-{{ gp_class }}">
+            <div class="item-row-1">
+                <div class="item-name">
+                    <a href="/recipes/{{ item.recipe_id }}">{{ item.recipe_name }}</a>
+                    <span class="vat-tag">VAT {{ "%.0f"|format(item.vat_rate) }}%</span>
+                    {% if item.is_using_override %}<span class="override-tag">Custom price</span>{% endif %}
+                </div>
+                <div>
+                    {% if item.gp_percent > 0 %}
+                        <span class="gp-pill {{ gp_class }}">{{ "%.1f"|format(item.gp_percent) }}% GP</span>
+                    {% else %}
+                        <span class="gp-pill none">No price set</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="cost-grid">
+                <div class="cost-cell">
+                    <div class="cost-cell-label">Ingredient cost</div>
+                    <div class="cost-cell-value cost">£{{ "%.2f"|format(item.ingredient_cost) }}</div>
+                </div>
+                <div class="cost-cell">
+                    <div class="cost-cell-label">Sell ex-VAT</div>
+                    <div class="cost-cell-value">£{{ "%.2f"|format(item.selling_price_ex_vat) }}</div>
+                </div>
+                <div class="cost-cell">
+                    <div class="cost-cell-label">Sell inc-VAT</div>
+                    <div class="cost-cell-value">£{{ "%.2f"|format(item.selling_price_inc_vat) }}</div>
+                </div>
+                <div class="cost-cell">
+                    <div class="cost-cell-label">Gross profit</div>
+                    <div class="cost-cell-value profit">£{{ "%.2f"|format(item.gross_profit) }}</div>
+                </div>
+            </div>
+
+            <form action="/menus/{{ menu.id }}/items/{{ item.id }}/update" method="POST">
+                <div class="item-controls">
+                    <div>
+                        <label>Menu price (inc-VAT, optional override)</label>
+                        <input type="number" step="0.01" name="menu_selling_price"
+                               value="{{ '%.2f'|format(item.selling_price_inc_vat) if item.is_using_override else '' }}"
+                               placeholder="leave blank to use recipe price">
+                    </div>
+                    <div>
+                        <label>Estimated weekly sales</label>
+                        <input type="number" min="0" name="estimated_weekly_sales" value="{{ item.weekly_sales }}">
+                    </div>
+                    <div class="control-actions">
+                        <button type="submit" class="btn btn-sm">Save</button>
+                    </div>
+                </div>
+            </form>
+
+            {% if item.weekly_sales > 0 %}
+            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #E8E5DD; font-size: 12.5px; color: #6B6860;">
+                Weekly: <strong style="color: #0A0A0A;">{{ item.weekly_sales }} sold</strong>
+                · revenue <strong style="color: #0A0A0A;">£{{ "%.0f"|format(item.weekly_revenue_ex_vat) }}</strong> ex-VAT
+                · GP <strong style="color: #2D4128;">£{{ "%.0f"|format(item.weekly_gp) }}</strong>
+            </div>
+            {% endif %}
+
+            <div style="margin-top: 8px; text-align: right;">
+                <form action="/menus/{{ menu.id }}/items/{{ item.id }}/remove" method="POST" onsubmit="return confirm('Remove this recipe from the menu?');" style="display: inline;">
+                    <button type="submit" class="btn btn-sm btn-secondary" style="font-size: 11px;">Remove from menu</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        {% elif available_recipes and available_recipes|length > 0 %}
+        <div class="empty-state">
+            <h3>No recipes added yet</h3>
+            <p>Use the form above to start adding recipes to this menu.</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
