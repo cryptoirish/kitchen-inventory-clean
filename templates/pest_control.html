@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pest Control - YieldGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+    <style>
+        .stat-tinted { border: none; padding: 16px; border-radius: 12px; }
+        .stat-tinted .stat-label { text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; }
+        .stat-tint-sage { background: #EEF1ED; }
+        .stat-tint-sage .stat-label { color: #2D4128; }
+        .stat-tint-amber { background: #FEF6E7; }
+        .stat-tint-amber .stat-label { color: #78350F; }
+        .stat-tint-maroon { background: #FBEDED; }
+        .stat-tint-maroon .stat-label { color: #5A1F1F; }
+
+        .section-heading {
+            font-size: 12px;
+            font-weight: 600;
+            color: #6B6860;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 28px 0 12px;
+        }
+        .section-heading-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 28px 0 12px;
+        }
+        .section-heading-row h2 {
+            font-size: 12px;
+            font-weight: 600;
+            color: #6B6860;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 0;
+        }
+
+        .visit-row, .sighting-row {
+            display: flex;
+            gap: 12px;
+            padding: 14px 16px;
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-left: 4px solid #4A6B45;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+        .visit-row.activity-found { border-left-color: #B45309; }
+        .sighting-row.unresolved { border-left-color: #7C2D2D; background: #FBEDED; }
+        .sighting-row.high { border-left-color: #7C2D2D; }
+        .sighting-row.medium { border-left-color: #B45309; }
+        .sighting-row.resolved { border-left-color: #9C988D; opacity: 0.75; }
+
+        .row-body { flex: 1; min-width: 0; }
+        .row-title { font-size: 14px; font-weight: 600; color: #0A0A0A; margin-bottom: 4px; }
+        .row-meta { font-size: 12.5px; color: #6B6860; line-height: 1.5; }
+        .row-meta strong { color: #0A0A0A; font-weight: 500; }
+        .row-actions { display: flex; gap: 6px; flex-shrink: 0; align-self: flex-start; }
+
+        .pill {
+            display: inline-block;
+            padding: 2px 9px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .pill-pass { background: #EEF1ED; color: #2D4128; }
+        .pill-warning { background: #FEF6E7; color: #78350F; }
+        .pill-danger { background: #FBEDED; color: #5A1F1F; }
+        .pill-grey { background: #F4F2EC; color: #6B6860; }
+
+        .row-photo {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            object-fit: cover;
+            background: #F4F2EC;
+            flex-shrink: 0;
+        }
+        .row-photo-wrap { display: block; }
+
+        .empty-list {
+            padding: 32px 16px;
+            text-align: center;
+            color: #9C988D;
+            font-size: 13.5px;
+        }
+        .empty-list a { color: #4A6B45; font-weight: 500; }
+
+        .resolve-form-toggle {
+            display: none;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #E8E5DD;
+        }
+        .resolve-form-toggle.active { display: block; }
+
+        .contract-card {
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-radius: 12px;
+            padding: 22px;
+            margin-bottom: 20px;
+        }
+        .contract-card h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #0A0A0A;
+        }
+
+        .toggle-row {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 10px 12px;
+            border: 1px solid #E8E5DD;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        .toggle-row input { margin-top: 3px; cursor: pointer; }
+        .toggle-row:has(input:checked) { background: #EEF1ED; border-color: #4A6B45; }
+        .toggle-text { flex: 1; }
+        .toggle-title { font-weight: 600; font-size: 14px; }
+        .toggle-help { font-size: 12px; color: #6B6860; margin-top: 2px; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 600px) {
+            .grid-2 { grid-template-columns: 1fr; }
+            .visit-row, .sighting-row { flex-wrap: wrap; }
+            .row-actions { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo"><span class="logo-icon">🍳</span><span>YieldGuard</span></a>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/recipes">Recipes</a>
+                <a href="/haccp" class="active">HACCP</a>
+                <a href="/alerts">Alerts</a>
+                <a href="/billing">Billing</a>
+                <a href="/logout">Logout</a>
+            </div>
+            <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+        <div class="mobile-menu" id="mobileMenu">
+            <a href="/">Dashboard</a>
+            <a href="/inventory">Inventory</a>
+            <a href="/recipes">Recipes</a>
+            <a href="/haccp" class="active">HACCP</a>
+            <a href="/alerts">Alerts</a>
+            <a href="/billing">Billing</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <a href="/haccp" class="back-link">← Back to HACCP</a>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-header">
+            <p class="page-eyebrow">Food Safety</p>
+            <h1>🐭 Pest Control</h1>
+            <p class="page-subtitle">Contract details, visit logs, and sighting reports — audit-ready for EHO inspection.</p>
+        </div>
+
+        <!-- Stats -->
+        <div class="stat-grid">
+            <div class="stat stat-tinted stat-tint-sage">
+                <div class="stat-label">Visits · 30d</div>
+                <div class="stat-value">{{ visits_30d }}</div>
+            </div>
+            <div class="stat stat-tinted stat-tint-{% if unresolved_count > 0 %}maroon{% else %}sage{% endif %}">
+                <div class="stat-label">Open sightings</div>
+                <div class="stat-value">{{ unresolved_count }}</div>
+            </div>
+            {% if days_since_last is not none %}
+            <div class="stat stat-tinted stat-tint-{% if days_since_last > 90 %}maroon{% elif days_since_last > 30 %}amber{% else %}sage{% endif %}">
+                <div class="stat-label">Days since last visit</div>
+                <div class="stat-value">{{ days_since_last }}</div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Contract -->
+        <h2 class="section-heading">Pest control contract</h2>
+        <div class="contract-card">
+            <form action="/haccp/pest-control/contract" method="POST">
+                <label class="toggle-row">
+                    <input type="checkbox" name="has_contract" {% if contract and contract.has_contract %}checked{% endif %}>
+                    <div class="toggle-text">
+                        <div class="toggle-title">We have a pest control contract</div>
+                        <div class="toggle-help">If untick, leave the fields below blank — visits can still be logged for DIY inspections.</div>
+                    </div>
+                </label>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Contractor name</label>
+                        <input type="text" name="contractor_name" value="{{ contract.contractor_name if contract and contract.contractor_name else '' }}" placeholder="e.g. Rentokil, Ecolab, John's Pest Control">
+                    </div>
+                    <div class="form-group">
+                        <label>Contract type</label>
+                        <input type="text" name="contract_type" value="{{ contract.contract_type if contract and contract.contract_type else '' }}" placeholder="e.g. Quarterly preventative">
+                    </div>
+                    <div class="form-group">
+                        <label>Contractor phone</label>
+                        <input type="text" name="contractor_phone" value="{{ contract.contractor_phone if contract and contract.contractor_phone else '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Contractor email</label>
+                        <input type="email" name="contractor_email" value="{{ contract.contractor_email if contract and contract.contractor_email else '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Visit frequency (days)</label>
+                        <input type="number" name="visit_frequency_days" min="1" value="{{ contract.visit_frequency_days if contract and contract.visit_frequency_days else '' }}" placeholder="30 = monthly, 90 = quarterly">
+                    </div>
+                    <div class="form-group full">
+                        <label>Notes</label>
+                        <input type="text" name="notes" value="{{ contract.notes if contract and contract.notes else '' }}" placeholder="Bait station locations, special instructions, etc.">
+                    </div>
+                </div>
+
+                <div style="margin-top: 14px;">
+                    <button type="submit" class="btn">Save contract details</button>
+                    {% if contract and contract.next_visit_due %}
+                    <span style="margin-left: 12px; font-size: 13px; color: #6B6860;">
+                        Next visit due: <strong style="color: #0A0A0A;">{{ contract.next_visit_due.strftime('%d %b %Y') }}</strong>
+                    </span>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <!-- Visits -->
+        <div class="section-heading-row">
+            <h2>Visit logs</h2>
+            <a href="/haccp/pest-control/visit/new" class="btn btn-sm">+ Log visit</a>
+        </div>
+        {% if visits and visits|length > 0 %}
+            {% for v in visits %}
+            <div class="visit-row {% if v.activity_found %}activity-found{% endif %}">
+                {% if v.photo_url %}
+                <a href="{{ v.photo_url }}" target="_blank" class="row-photo-wrap">
+                    <img src="{{ v.photo_url }}" alt="Visit photo" class="row-photo">
+                </a>
+                {% endif %}
+                <div class="row-body">
+                    <div class="row-title">
+                        {{ v.visit_date.strftime('%d %b %Y') }}
+                        {% if v.activity_found %}
+                            <span class="pill pill-warning">Activity found</span>
+                        {% else %}
+                            <span class="pill pill-pass">Clear</span>
+                        {% endif %}
+                        {% if v.visit_type == 'emergency' %}<span class="pill pill-danger">Emergency</span>{% endif %}
+                        {% if v.is_contractor %}<span class="pill pill-grey">Contractor</span>{% else %}<span class="pill pill-grey">In-house</span>{% endif %}
+                    </div>
+                    <div class="row-meta">
+                        {% if v.inspector_name %}<strong>{{ v.inspector_name }}</strong> · {% endif %}
+                        {% if v.areas_inspected %}{{ v.areas_inspected }}{% endif %}
+                        {% if v.findings %}<br>Findings: {{ v.findings }}{% endif %}
+                        {% if v.action_taken %}<br>Action: {{ v.action_taken }}{% endif %}
+                        {% if v.notes %}<br><em>{{ v.notes }}</em>{% endif %}
+                    </div>
+                </div>
+                <div class="row-actions">
+                    <form action="/haccp/pest-control/visit/{{ v.id }}/delete" method="POST" onsubmit="return confirm('Delete this visit log?');" style="display: inline;">
+                        <button type="submit" class="btn btn-sm btn-secondary">Delete</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-list">
+                No visits logged yet. <a href="/haccp/pest-control/visit/new">Log your first visit →</a>
+            </div>
+        {% endif %}
+
+        <!-- Sightings -->
+        <div class="section-heading-row">
+            <h2>Sighting / incident reports</h2>
+            <a href="/haccp/pest-control/sighting/new" class="btn btn-sm btn-danger">+ Report sighting</a>
+        </div>
+        {% if sightings and sightings|length > 0 %}
+            {% for s in sightings %}
+            <div class="sighting-row {% if not s.is_resolved %}unresolved{% else %}resolved{% endif %} {{ s.severity }}">
+                {% if s.photo_url %}
+                <a href="{{ s.photo_url }}" target="_blank" class="row-photo-wrap">
+                    <img src="{{ s.photo_url }}" alt="Sighting photo" class="row-photo">
+                </a>
+                {% endif %}
+                <div class="row-body">
+                    <div class="row-title">
+                        {{ s.pest_type|capitalize }} — {{ s.sighted_at.strftime('%d %b %Y · %H:%M') }}
+                        {% if s.is_resolved %}
+                            <span class="pill pill-pass">Resolved</span>
+                        {% else %}
+                            <span class="pill pill-danger">Open</span>
+                        {% endif %}
+                        {% if s.severity == 'high' %}<span class="pill pill-danger">High</span>
+                        {% elif s.severity == 'medium' %}<span class="pill pill-warning">Medium</span>
+                        {% else %}<span class="pill pill-grey">Low</span>{% endif %}
+                    </div>
+                    <div class="row-meta">
+                        {% if s.location %}<strong>{{ s.location }}</strong> · {% endif %}
+                        Reported by {{ s.reported_by or 'Unknown' }}
+                        {% if s.contractor_notified %} · contractor notified{% endif %}
+                        {% if s.description %}<br>{{ s.description }}{% endif %}
+                        {% if s.action_taken %}<br>Initial action: {{ s.action_taken }}{% endif %}
+                        {% if s.is_resolved %}
+                            <br><strong>Resolved:</strong> {{ s.resolution_notes }}
+                            <span style="color: #9C988D;">— by {{ s.resolved_by }} on {{ s.resolved_at.strftime('%d %b') }}</span>
+                        {% endif %}
+                    </div>
+
+                    {% if not s.is_resolved %}
+                    <div class="resolve-form-toggle" id="resolve-{{ s.id }}">
+                        <form action="/haccp/pest-control/sighting/{{ s.id }}/resolve" method="POST">
+                            <div class="form-group">
+                                <label>How was this resolved?</label>
+                                <input type="text" name="resolution_notes" required placeholder="e.g. Trap reset, contractor visited, deep clean done">
+                            </div>
+                            <div style="margin-top: 8px; display: flex; gap: 6px;">
+                                <button type="submit" class="btn btn-sm">Mark resolved</button>
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('resolve-{{ s.id }}').classList.remove('active')">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="row-actions">
+                    {% if not s.is_resolved %}
+                    <button type="button" class="btn btn-sm" onclick="document.getElementById('resolve-{{ s.id }}').classList.toggle('active')">Resolve</button>
+                    {% endif %}
+                    <form action="/haccp/pest-control/sighting/{{ s.id }}/delete" method="POST" onsubmit="return confirm('Delete this sighting?');" style="display: inline;">
+                        <button type="submit" class="btn btn-sm btn-secondary">Delete</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-list">
+                No sightings reported. <a href="/haccp/pest-control/sighting/new">Log a sighting →</a> if anything is spotted.
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>
