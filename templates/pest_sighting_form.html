@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report Pest Sighting - YieldGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+    <style>
+        .toggle-row {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 10px 12px;
+            border: 1px solid #E8E5DD;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        .toggle-row input { margin-top: 3px; cursor: pointer; }
+        .toggle-row:has(input:checked) { background: #FBEDED; border-color: #7C2D2D; }
+        .toggle-text { flex: 1; }
+        .toggle-title { font-weight: 600; font-size: 14px; }
+        .toggle-help { font-size: 12px; color: #6B6860; margin-top: 2px; }
+
+        .severity-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 6px;
+        }
+        .severity-option {
+            display: block;
+            padding: 12px;
+            border: 1px solid #E8E5DD;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .severity-option input { display: none; }
+        .severity-option.low:has(input:checked) { background: #EEF1ED; border-color: #4A6B45; color: #2D4128; }
+        .severity-option.medium:has(input:checked) { background: #FEF6E7; border-color: #B45309; color: #78350F; }
+        .severity-option.high:has(input:checked) { background: #FBEDED; border-color: #7C2D2D; color: #5A1F1F; }
+
+        .photo-upload {
+            border: 2px dashed #D6D2C7;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            background: #FAFAF7;
+        }
+        .photo-upload label {
+            cursor: pointer;
+            color: #4A6B45;
+            font-weight: 500;
+        }
+        .photo-upload input[type="file"] {
+            display: block;
+            margin: 8px auto;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo"><span class="logo-icon">🍳</span><span>YieldGuard</span></a>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/recipes">Recipes</a>
+                <a href="/haccp" class="active">HACCP</a>
+                <a href="/alerts">Alerts</a>
+                <a href="/billing">Billing</a>
+                <a href="/logout">Logout</a>
+            </div>
+            <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+        <div class="mobile-menu" id="mobileMenu">
+            <a href="/">Dashboard</a>
+            <a href="/inventory">Inventory</a>
+            <a href="/recipes">Recipes</a>
+            <a href="/haccp" class="active">HACCP</a>
+            <a href="/alerts">Alerts</a>
+            <a href="/billing">Billing</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container-narrow">
+        <a href="/haccp/pest-control" class="back-link">← Back to Pest Control</a>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-header">
+            <p class="page-eyebrow">Pest Control</p>
+            <h1>Report a sighting</h1>
+            <p class="page-subtitle">Log evidence of pests between scheduled visits — droppings, sightings, damage, anything unusual.</p>
+        </div>
+
+        <form action="/haccp/pest-control/sighting/new" method="POST" enctype="multipart/form-data">
+            <div class="card">
+                <h2>What did you see?</h2>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Pest type *</label>
+                        <select name="pest_type" required>
+                            <option value="">-- Select --</option>
+                            <option value="rodent">Rodent (mouse / rat)</option>
+                            <option value="droppings">Droppings</option>
+                            <option value="cockroach">Cockroach</option>
+                            <option value="flies">Flies</option>
+                            <option value="ants">Ants</option>
+                            <option value="moths">Moths</option>
+                            <option value="weevils">Weevils / stored product</option>
+                            <option value="bird">Bird</option>
+                            <option value="damage">Gnaw / damage marks</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>When *</label>
+                        <input type="datetime-local" name="sighted_at" required>
+                    </div>
+                    <div class="form-group full">
+                        <label>Where in the kitchen *</label>
+                        <input type="text" name="location" required placeholder="e.g. Behind the dry store shelving, near the back door, under the prep table">
+                    </div>
+                    <div class="form-group full">
+                        <label>Description</label>
+                        <textarea name="description" rows="2" placeholder="What exactly did you see? How many, what state, etc."></textarea>
+                    </div>
+                </div>
+
+                <div style="margin-top: 14px;">
+                    <label style="display: block; margin-bottom: 6px;">Severity *</label>
+                    <div class="severity-grid">
+                        <label class="severity-option low">
+                            <input type="radio" name="severity" value="low" checked>
+                            🟢 Low<br>
+                            <span style="font-size: 11px; font-weight: 400;">Single, isolated</span>
+                        </label>
+                        <label class="severity-option medium">
+                            <input type="radio" name="severity" value="medium">
+                            🟡 Medium<br>
+                            <span style="font-size: 11px; font-weight: 400;">Recurring</span>
+                        </label>
+                        <label class="severity-option high">
+                            <input type="radio" name="severity" value="high">
+                            🔴 High<br>
+                            <span style="font-size: 11px; font-weight: 400;">Active infestation</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Action &amp; reporting</h2>
+                <div class="form-grid">
+                    <div class="form-group full">
+                        <label>Reported by</label>
+                        <input type="text" name="reported_by" placeholder="Your name (defaults to logged-in user)">
+                    </div>
+                    <div class="form-group full">
+                        <label>Initial action taken</label>
+                        <textarea name="action_taken" rows="2" placeholder="What did you do immediately? E.g. cleaned area, set trap, isolated affected stock"></textarea>
+                    </div>
+                </div>
+
+                <label class="toggle-row" style="margin-top: 14px;">
+                    <input type="checkbox" name="contractor_notified">
+                    <div class="toggle-text">
+                        <div class="toggle-title">Pest control contractor has been notified</div>
+                        <div class="toggle-help">Tick if you've called/emailed your contractor about this sighting.</div>
+                    </div>
+                </label>
+            </div>
+
+            <div class="card">
+                <h2>Evidence photo (recommended)</h2>
+                <p class="form-hint" style="margin-bottom: 12px;">A photo strengthens the audit trail and helps your contractor diagnose the issue.</p>
+                <div class="photo-upload">
+                    <label for="photo">📷 Tap to add a photo</label>
+                    <input type="file" name="photo" id="photo" accept="image/*" capture="environment">
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px;">
+                <a href="/haccp/pest-control" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-danger">Report sighting</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const dt = document.querySelector('input[name="sighted_at"]');
+            if (dt && !dt.value) {
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                dt.value = now.toISOString().slice(0, 16);
+            }
+        });
+    </script>
+</body>
+</html>
