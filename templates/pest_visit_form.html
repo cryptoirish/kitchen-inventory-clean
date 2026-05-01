@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Pest Control Visit - YieldGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+    <style>
+        .toggle-row {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 10px 12px;
+            border: 1px solid #E8E5DD;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        .toggle-row input { margin-top: 3px; cursor: pointer; }
+        .toggle-row:has(input:checked) { background: #EEF1ED; border-color: #4A6B45; }
+        .toggle-text { flex: 1; }
+        .toggle-title { font-weight: 600; font-size: 14px; }
+        .toggle-help { font-size: 12px; color: #6B6860; margin-top: 2px; }
+
+        .photo-upload {
+            border: 2px dashed #D6D2C7;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            background: #FAFAF7;
+        }
+        .photo-upload label {
+            cursor: pointer;
+            color: #4A6B45;
+            font-weight: 500;
+        }
+        .photo-upload input[type="file"] {
+            display: block;
+            margin: 8px auto;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo"><span class="logo-icon">🍳</span><span>YieldGuard</span></a>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/recipes">Recipes</a>
+                <a href="/haccp" class="active">HACCP</a>
+                <a href="/alerts">Alerts</a>
+                <a href="/billing">Billing</a>
+                <a href="/logout">Logout</a>
+            </div>
+            <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+        <div class="mobile-menu" id="mobileMenu">
+            <a href="/">Dashboard</a>
+            <a href="/inventory">Inventory</a>
+            <a href="/recipes">Recipes</a>
+            <a href="/haccp" class="active">HACCP</a>
+            <a href="/alerts">Alerts</a>
+            <a href="/billing">Billing</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container-narrow">
+        <a href="/haccp/pest-control" class="back-link">← Back to Pest Control</a>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-header">
+            <p class="page-eyebrow">Pest Control</p>
+            <h1>Log a visit</h1>
+            <p class="page-subtitle">Record a contractor visit or in-house pest check.</p>
+        </div>
+
+        <form action="/haccp/pest-control/visit/new" method="POST" enctype="multipart/form-data">
+            <div class="card">
+                <h2>Visit details</h2>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Visit date *</label>
+                        <input type="datetime-local" name="visit_date" required value="{{ datetime_now if datetime_now else '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Visit type</label>
+                        <select name="visit_type">
+                            <option value="scheduled">Scheduled</option>
+                            <option value="emergency">Emergency call-out</option>
+                            <option value="follow_up">Follow-up</option>
+                            <option value="self_check">In-house self-check</option>
+                        </select>
+                    </div>
+                    <div class="form-group full">
+                        <label>Inspector / contractor name</label>
+                        <input type="text" name="inspector_name" placeholder="e.g. James from Rentokil, or staff name for in-house">
+                    </div>
+                </div>
+
+                <label class="toggle-row" style="margin-top: 14px;">
+                    <input type="checkbox" name="is_contractor" checked>
+                    <div class="toggle-text">
+                        <div class="toggle-title">External contractor visit</div>
+                        <div class="toggle-help">Untick if this was an in-house staff check.</div>
+                    </div>
+                </label>
+            </div>
+
+            <div class="card">
+                <h2>What was checked &amp; found</h2>
+                <div class="form-grid">
+                    <div class="form-group full">
+                        <label>Areas inspected</label>
+                        <input type="text" name="areas_inspected" placeholder="e.g. Kitchen, dry store, bin area, external perimeter">
+                    </div>
+                    <div class="form-group full">
+                        <label>Findings</label>
+                        <textarea name="findings" rows="3" placeholder="What was observed — bait stations checked, traps cleared, droppings, evidence of activity, etc."></textarea>
+                    </div>
+                </div>
+
+                <label class="toggle-row" style="margin-top: 14px;">
+                    <input type="checkbox" name="activity_found">
+                    <div class="toggle-text">
+                        <div class="toggle-title">⚠️ Pest activity was found</div>
+                        <div class="toggle-help">Tick if any signs of pests were detected. This will be flagged on your audit trail.</div>
+                    </div>
+                </label>
+
+                <div class="form-group full" style="margin-top: 14px;">
+                    <label>Action taken</label>
+                    <textarea name="action_taken" rows="2" placeholder="Treatments applied, baits replaced, recommendations made, follow-up scheduled, etc."></textarea>
+                </div>
+
+                <div class="form-group full" style="margin-top: 12px;">
+                    <label>Additional notes</label>
+                    <textarea name="notes" rows="2"></textarea>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Contractor's report (optional)</h2>
+                <p class="form-hint" style="margin-bottom: 12px;">Photograph the paper service report from your contractor for the audit trail.</p>
+                <div class="photo-upload">
+                    <label for="photo">📷 Tap to add a photo</label>
+                    <input type="file" name="photo" id="photo" accept="image/*" capture="environment">
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px;">
+                <a href="/haccp/pest-control" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn">Log visit</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // Pre-fill the date with current time
+        document.addEventListener('DOMContentLoaded', () => {
+            const dt = document.querySelector('input[name="visit_date"]');
+            if (dt && !dt.value) {
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                dt.value = now.toISOString().slice(0, 16);
+            }
+        });
+    </script>
+</body>
+</html>
