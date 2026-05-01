@@ -1509,14 +1509,17 @@ def menu_report_pdf(menu_id):
             # Colour-code the GP% column
             for i, it in enumerate(items, start=1):
                 if it['gp_percent'] >= 65:
-                    ts.add('BACKGROUND', (6, i), (6, i), colors.HexColor('#EEF1ED'))
-                    ts.add('TEXTCOLOR', (6, i), (6, i), colors.HexColor('#2D4128'))
+                    ts.add('BACKGROUND', (6, i), (6, i), colors.HexColor('#4A6B45'))
+                    ts.add('TEXTCOLOR', (6, i), (6, i), colors.white)
+                    ts.add('FONTNAME', (6, i), (6, i), 'Helvetica-Bold')
                 elif it['gp_percent'] >= 50:
-                    ts.add('BACKGROUND', (6, i), (6, i), colors.HexColor('#FEF6E7'))
-                    ts.add('TEXTCOLOR', (6, i), (6, i), colors.HexColor('#78350F'))
+                    ts.add('BACKGROUND', (6, i), (6, i), colors.HexColor('#D97706'))
+                    ts.add('TEXTCOLOR', (6, i), (6, i), colors.white)
+                    ts.add('FONTNAME', (6, i), (6, i), 'Helvetica-Bold')
                 elif it['gp_percent'] > 0:
-                    ts.add('BACKGROUND', (6, i), (6, i), colors.HexColor('#FBEDED'))
-                    ts.add('TEXTCOLOR', (6, i), (6, i), colors.HexColor('#5A1F1F'))
+                    ts.add('BACKGROUND', (6, i), (6, i), colors.HexColor('#7C2D2D'))
+                    ts.add('TEXTCOLOR', (6, i), (6, i), colors.white)
+                    ts.add('FONTNAME', (6, i), (6, i), 'Helvetica-Bold')
             costing_table.setStyle(ts)
             story.append(costing_table)
         else:
