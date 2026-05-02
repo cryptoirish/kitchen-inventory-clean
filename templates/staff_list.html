@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff - YieldGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+    <style>
+        .stat-tinted { border: none; padding: 16px; border-radius: 12px; }
+        .stat-tinted .stat-label { text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; }
+        .stat-tint-sage { background: #EEF1ED; }
+        .stat-tint-sage .stat-label { color: #2D4128; }
+        .stat-tint-amber { background: #FEF6E7; }
+        .stat-tint-amber .stat-label { color: #78350F; }
+        .stat-tint-maroon { background: #FBEDED; }
+        .stat-tint-maroon .stat-label { color: #5A1F1F; }
+
+        .staff-card {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 10px;
+            text-decoration: none;
+            color: #0A0A0A;
+            transition: border-color 0.15s;
+        }
+        .staff-card:hover { border-color: #4A6B45; color: #0A0A0A; }
+        .staff-card.archived { opacity: 0.6; }
+        .staff-photo {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #EEF1ED;
+            color: #4A6B45;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 600;
+            flex-shrink: 0;
+            object-fit: cover;
+        }
+        .staff-body { flex: 1; min-width: 0; }
+        .staff-name { font-size: 15px; font-weight: 600; color: #0A0A0A; }
+        .staff-meta { font-size: 12.5px; color: #6B6860; margin-top: 2px; }
+        .staff-stats { font-size: 12px; color: #4A6B45; margin-top: 4px; }
+        .pill {
+            display: inline-block;
+            padding: 2px 9px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .pill-active { background: #EEF1ED; color: #2D4128; }
+        .pill-archived { background: #F4F2EC; color: #6B6860; }
+        .empty-state {
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-radius: 12px;
+            padding: 50px 20px;
+            text-align: center;
+            color: #6B6860;
+        }
+        .empty-state h3 { color: #0A0A0A; margin-bottom: 8px; font-size: 17px; }
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .toolbar a { color: #6B6860; text-decoration: none; }
+        .toolbar a.active { color: #4A6B45; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo"><span class="logo-icon">🍳</span><span>YieldGuard</span></a>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/recipes">Recipes</a>
+                <a href="/menus">Menus</a>
+                <a href="/haccp">HACCP</a>
+                <a href="/staff" class="active">Staff</a>
+                <a href="/alerts">Alerts</a>
+                <a href="/logout">Logout</a>
+            </div>
+            <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+        <div class="mobile-menu" id="mobileMenu">
+            <a href="/">Dashboard</a>
+            <a href="/inventory">Inventory</a>
+            <a href="/recipes">Recipes</a>
+            <a href="/menus">Menus</a>
+            <a href="/haccp">HACCP</a>
+            <a href="/staff" class="active">Staff</a>
+            <a href="/alerts">Alerts</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+            <div>
+                <p class="page-eyebrow">Training records</p>
+                <h1>👥 Staff</h1>
+                <p class="page-subtitle">Team list, certifications, and training records.</p>
+            </div>
+            <div>
+                <a href="/staff/new" class="btn">+ Add staff</a>
+            </div>
+        </div>
+
+        <div class="stat-grid">
+            <div class="stat stat-tinted stat-tint-sage">
+                <div class="stat-label">Active staff</div>
+                <div class="stat-value">{{ active_count }}</div>
+            </div>
+            <div class="stat stat-tinted stat-tint-{% if expired_count > 0 %}maroon{% else %}sage{% endif %}">
+                <div class="stat-label">Expired certs</div>
+                <div class="stat-value">{{ expired_count }}</div>
+            </div>
+            <div class="stat stat-tinted stat-tint-{% if expiring_soon_count > 0 %}amber{% else %}sage{% endif %}">
+                <div class="stat-label">Expiring &lt; 30 days</div>
+                <div class="stat-value">{{ expiring_soon_count }}</div>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            {% if show_archived %}
+            <a href="/staff" class="active">Showing all</a> · <a href="/staff">Active only</a>
+            {% else %}
+            <a href="/staff" class="active">Active only</a> · <a href="/staff?archived=1">Show archived</a>
+            {% endif %}
+        </div>
+
+        {% if staff and staff|length > 0 %}
+            {% for s in staff %}
+            <a href="/staff/{{ s.id }}" class="staff-card {% if not s.is_active %}archived{% endif %}">
+                {% if s.photo_url %}
+                <img src="{{ s.photo_url }}" alt="{{ s.first_name }}" class="staff-photo">
+                {% else %}
+                <div class="staff-photo">{{ s.first_name[0]|upper }}{% if s.last_name %}{{ s.last_name[0]|upper }}{% endif %}</div>
+                {% endif %}
+                <div class="staff-body">
+                    <div class="staff-name">
+                        {{ s.first_name }} {% if s.last_name %}{{ s.last_name }}{% endif %}
+                        {% if not s.is_active %}<span class="pill pill-archived">Archived</span>{% endif %}
+                    </div>
+                    <div class="staff-meta">
+                        {% if s.role %}{{ s.role }}{% endif %}
+                        {% if s.start_date %}{% if s.role %} · {% endif %}Started {{ s.start_date.strftime('%b %Y') }}{% endif %}
+                    </div>
+                    {% if s.cert_count or s.training_count %}
+                    <div class="staff-stats">
+                        {% if s.cert_count %}{{ s.cert_count }} cert{% if s.cert_count != 1 %}s{% endif %}{% endif %}
+                        {% if s.cert_count and s.training_count %} · {% endif %}
+                        {% if s.training_count %}{{ s.training_count }} training record{% if s.training_count != 1 %}s{% endif %}{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </a>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <h3>No staff yet</h3>
+                <p>Add your team members to start tracking training and certifications.</p>
+                <p style="margin-top: 16px;"><a href="/staff/new" class="btn">+ Add first staff member</a></p>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>
