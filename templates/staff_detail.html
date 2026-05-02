@@ -3,20 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ person.first_name }} - YieldGuard</title>
+    <title>{{ person.first_name }} {{ person.last_name or '' }} - YieldGuard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
     <style>
         .person-header {
-            display: flex;
-            gap: 18px;
-            align-items: center;
             background: #FFFFFF;
             border: 1px solid #E8E5DD;
             border-radius: 12px;
-            padding: 22px;
-            margin-bottom: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            flex-wrap: wrap;
         }
-        .person-photo {
+        .person-avatar {
             width: 80px;
             height: 80px;
             border-radius: 50%;
@@ -25,23 +26,34 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            font-weight: 700;
             font-size: 28px;
-            font-weight: 600;
             flex-shrink: 0;
-            object-fit: cover;
+            background-size: cover;
+            background-position: center;
         }
-        .person-info { flex: 1; min-width: 0; }
+        .person-body { flex: 1; min-width: 200px; }
         .person-name {
-            font-size: 22px;
+            font-size: 24px;
             font-weight: 600;
+            letter-spacing: -0.025em;
             margin-bottom: 4px;
-            letter-spacing: -0.01em;
         }
-        .person-role {
-            font-size: 14px;
+        .person-meta {
+            font-size: 13.5px;
             color: #6B6860;
             margin-bottom: 8px;
         }
+        .person-contact {
+            font-size: 13px;
+            color: #6B6860;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .person-contact a { color: #4A6B45; text-decoration: none; }
+        .person-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
         .pill {
             display: inline-block;
             padding: 2px 9px;
@@ -52,43 +64,123 @@
             letter-spacing: 0.5px;
         }
         .pill-active { background: #EEF1ED; color: #2D4128; }
-        .pill-archived { background: #FBEDED; color: #5A1F1F; }
+        .pill-archived { background: #F4F2EC; color: #6B6860; }
+        .pill-valid { background: #EEF1ED; color: #2D4128; }
+        .pill-expiring { background: #FEF6E7; color: #78350F; }
+        .pill-expired { background: #FBEDED; color: #5A1F1F; }
+        .pill-no-expiry { background: #F4F2EC; color: #6B6860; }
 
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 14px;
-            margin-top: 8px;
+        .section-heading-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin: 28px 0 12px;
         }
-        .info-item-label {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #6B6860;
-            font-weight: 600;
-            margin-bottom: 2px;
-        }
-        .info-item-value { font-size: 14px; color: #0A0A0A; }
-        .info-item-value a { color: #4A6B45; }
-
-        .placeholder-card {
-            background: #FAFAF7;
-            border: 1px dashed #D6D2C7;
-            border-radius: 12px;
-            padding: 28px 20px;
-            text-align: center;
-            color: #6B6860;
-            font-size: 13.5px;
-        }
-        .placeholder-card strong { color: #0A0A0A; }
-        .section-heading {
+        .section-heading-row h2 {
             font-size: 12px;
             font-weight: 600;
             color: #6B6860;
             text-transform: uppercase;
             letter-spacing: 0.06em;
-            margin: 28px 0 12px;
+            margin: 0;
         }
+
+        .cert-card {
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-left: 4px solid #9C988D;
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            display: flex;
+            gap: 12px;
+        }
+        .cert-card.valid { border-left-color: #4A6B45; }
+        .cert-card.expiring_soon { border-left-color: #B45309; background: #FEF6E7; }
+        .cert-card.expiring { border-left-color: #B45309; }
+        .cert-card.expired { border-left-color: #7C2D2D; background: #FBEDED; }
+
+        .cert-photo {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            object-fit: cover;
+            background: #F4F2EC;
+            flex-shrink: 0;
+        }
+        .cert-body { flex: 1; min-width: 0; }
+        .cert-title { font-size: 14px; font-weight: 600; color: #0A0A0A; margin-bottom: 3px; }
+        .cert-meta { font-size: 12.5px; color: #6B6860; line-height: 1.5; }
+        .cert-meta strong { color: #0A0A0A; font-weight: 500; }
+        .cert-actions { display: flex; gap: 6px; flex-shrink: 0; align-self: flex-start; }
+
+        .training-card {
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-left: 4px solid #1E5A8A;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+        }
+        .training-body { flex: 1; min-width: 0; }
+        .training-title { font-size: 14px; font-weight: 600; color: #0A0A0A; margin-bottom: 3px; }
+        .training-meta { font-size: 12.5px; color: #6B6860; line-height: 1.5; }
+        .training-meta strong { color: #0A0A0A; font-weight: 500; }
+
+        .add-form-card {
+            background: #FAFAF7;
+            border: 1px dashed #D6D2C7;
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 14px;
+        }
+        .add-form-card h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #0A0A0A;
+        }
+
+        .empty-list {
+            padding: 24px 16px;
+            text-align: center;
+            color: #9C988D;
+            font-size: 13px;
+            background: #FFFFFF;
+            border: 1px dashed #E8E5DD;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .photo-upload {
+            border: 2px dashed #D6D2C7;
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+            background: #FFFFFF;
+        }
+        .photo-upload label { cursor: pointer; color: #4A6B45; font-weight: 500; font-size: 13px; }
+        .photo-upload input[type="file"] { display: block; margin: 6px auto 0; font-size: 12px; }
+
+        .toggle-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 8px 12px;
+            border: 1px solid #E8E5DD;
+            border-radius: 8px;
+            margin-top: 8px;
+            cursor: pointer;
+            background: #FFFFFF;
+        }
+        .toggle-row input { margin-top: 3px; cursor: pointer; }
+        .toggle-row .toggle-text { flex: 1; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -130,85 +222,204 @@
             {% endfor %}
         {% endwith %}
 
+        <!-- Person header -->
         <div class="person-header">
-            {% if person.photo_url %}
-            <img src="{{ person.photo_url }}" alt="{{ person.first_name }}" class="person-photo">
-            {% else %}
-            <div class="person-photo">{{ person.first_name[0]|upper }}{% if person.last_name %}{{ person.last_name[0]|upper }}{% endif %}</div>
-            {% endif %}
-            <div class="person-info">
-                <div class="person-name">
-                    {{ person.first_name }} {% if person.last_name %}{{ person.last_name }}{% endif %}
-                    {% if person.is_active %}
-                        <span class="pill pill-active" style="vertical-align: middle; font-size: 10px;">Active</span>
-                    {% else %}
-                        <span class="pill pill-archived" style="vertical-align: middle; font-size: 10px;">Archived</span>
-                    {% endif %}
+            <div class="person-avatar" {% if person.photo_url %}style="background-image: url('{{ person.photo_url }}'); color: transparent;"{% endif %}>
+                {{ person.first_name[0]|upper }}{% if person.last_name %}{{ person.last_name[0]|upper }}{% endif %}
+            </div>
+            <div class="person-body">
+                <div class="person-name">{{ person.first_name }} {{ person.last_name or '' }}
+                    {% if person.is_active %}<span class="pill pill-active" style="vertical-align: middle; margin-left: 4px;">Active</span>
+                    {% else %}<span class="pill pill-archived" style="vertical-align: middle; margin-left: 4px;">Archived</span>{% endif %}
                 </div>
-                {% if person.role %}<div class="person-role">{{ person.role }}</div>{% endif %}
+                <div class="person-meta">
+                    {% if person.role %}{{ person.role }}{% endif %}
+                    {% if person.role and person.start_date %} · {% endif %}
+                    {% if person.start_date %}joined {{ person.start_date.strftime('%d %b %Y') }}{% endif %}
+                </div>
+                <div class="person-contact">
+                    {% if person.email %}<a href="mailto:{{ person.email }}">{{ person.email }}</a>{% endif %}
+                    {% if person.phone %}<span>{{ person.phone }}</span>{% endif %}
+                </div>
+            </div>
+            <div class="person-actions">
+                <a href="/staff/{{ person.id }}/edit" class="btn btn-secondary">Edit</a>
+                {% if person.is_active %}
+                <form action="/staff/{{ person.id }}/archive" method="POST" onsubmit="return confirm('Mark this person as left? Their records stay in the audit trail.');" style="display: inline;">
+                    <button type="submit" class="btn btn-secondary">Archive</button>
+                </form>
+                {% else %}
+                <form action="/staff/{{ person.id }}/restore" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-secondary">Restore</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
 
-                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;">
-                    <a href="/staff/{{ person.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
-                    {% if person.is_active %}
-                    <form action="/staff/{{ person.id }}/archive" method="POST" onsubmit="return confirm('Archive {{ person.first_name }}? Their training records stay in the audit trail.');" style="display: inline;">
-                        <button type="submit" class="btn btn-sm btn-secondary" style="color: #7C2D2D;">Archive</button>
+        {% if person.notes %}
+        <div class="card" style="background: #F4F2EC; border-color: #E8E5DD; padding: 12px 16px; margin-bottom: 18px;">
+            <p style="font-size: 13px; color: #4A4842; margin: 0;">{{ person.notes }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Certifications section -->
+        <div class="section-heading-row">
+            <h2>Food safety certifications</h2>
+        </div>
+
+        <div class="add-form-card">
+            <h3>+ Add a certification</h3>
+            <form action="/staff/{{ person.id }}/cert/new" method="POST" enctype="multipart/form-data">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Cert type *</label>
+                        <select name="cert_type" required onchange="document.getElementById('cert_other').style.display = this.value === 'Other' ? 'block' : 'none'">
+                            <option value="">-- Pick a type --</option>
+                            {% for ct in cert_types %}
+                            <option value="{{ ct }}">{{ ct }}</option>
+                            {% endfor %}
+                        </select>
+                        <div id="cert_other" style="display: none; margin-top: 8px;">
+                            <input type="text" name="cert_type_other" placeholder="Custom cert name">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Awarding body</label>
+                        <select name="awarding_body">
+                            <option value="">-- Optional --</option>
+                            {% for ab in awarding_bodies %}
+                            <option value="{{ ab }}">{{ ab }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Issue date *</label>
+                        <input type="date" name="issue_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Expiry date</label>
+                        <input type="date" name="expiry_date">
+                    </div>
+                    <div class="form-group full">
+                        <label>Certificate number (optional)</label>
+                        <input type="text" name="certificate_number" placeholder="e.g. ABC-123456">
+                    </div>
+                    <div class="form-group full">
+                        <label>Notes (optional)</label>
+                        <input type="text" name="notes">
+                    </div>
+                </div>
+
+                <div style="margin-top: 12px;">
+                    <div class="photo-upload">
+                        <label for="cert_photo">📷 Tap to upload certificate photo</label>
+                        <input type="file" name="photo" id="cert_photo" accept="image/*" capture="environment">
+                    </div>
+                </div>
+
+                <div style="margin-top: 12px; text-align: right;">
+                    <button type="submit" class="btn">Save cert</button>
+                </div>
+            </form>
+        </div>
+
+        {% if certs and certs|length > 0 %}
+            {% for c in certs %}
+            <div class="cert-card {{ c.status }}">
+                {% if c.photo_url %}
+                <a href="{{ c.photo_url }}" target="_blank">
+                    <img src="{{ c.photo_url }}" alt="Cert photo" class="cert-photo">
+                </a>
+                {% endif %}
+                <div class="cert-body">
+                    <div class="cert-title">
+                        {{ c.cert_type }}
+                        {% if c.status == 'expired' %}<span class="pill pill-expired">Expired</span>
+                        {% elif c.status == 'expiring_soon' %}<span class="pill pill-expiring">Expires in {{ c.days_left }}d</span>
+                        {% elif c.status == 'expiring' %}<span class="pill pill-expiring">Expires in {{ c.days_left }}d</span>
+                        {% elif c.status == 'valid' %}<span class="pill pill-valid">Valid</span>
+                        {% else %}<span class="pill pill-no-expiry">No expiry</span>{% endif %}
+                    </div>
+                    <div class="cert-meta">
+                        {% if c.awarding_body %}<strong>{{ c.awarding_body }}</strong> · {% endif %}
+                        Issued {{ c.issue_date.strftime('%d %b %Y') }}
+                        {% if c.expiry_date %} · expires {{ c.expiry_date.strftime('%d %b %Y') }}{% endif %}
+                        {% if c.certificate_number %}<br>Cert no. {{ c.certificate_number }}{% endif %}
+                        {% if c.notes %}<br><em>{{ c.notes }}</em>{% endif %}
+                    </div>
+                </div>
+                <div class="cert-actions">
+                    <form action="/staff/{{ person.id }}/cert/{{ c.id }}/delete" method="POST" onsubmit="return confirm('Delete this certification record?');">
+                        <button type="submit" class="btn btn-sm btn-secondary">Delete</button>
                     </form>
-                    {% else %}
-                    <form action="/staff/{{ person.id }}/restore" method="POST" style="display: inline;">
-                        <button type="submit" class="btn btn-sm">Restore</button>
-                    </form>
-                    {% endif %}
                 </div>
             </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-list">No certifications recorded yet.</div>
+        {% endif %}
+
+        <!-- Training records section -->
+        <div class="section-heading-row">
+            <h2>Internal training records</h2>
         </div>
 
-        <div class="card">
-            <h2>Contact &amp; employment</h2>
-            <div class="info-grid">
-                {% if person.email %}
-                <div>
-                    <div class="info-item-label">Email</div>
-                    <div class="info-item-value"><a href="mailto:{{ person.email }}">{{ person.email }}</a></div>
+        <div class="add-form-card">
+            <h3>+ Add training record</h3>
+            <form action="/staff/{{ person.id }}/training/new" method="POST">
+                <div class="form-grid">
+                    <div class="form-group full">
+                        <label>Topic *</label>
+                        <input type="text" name="topic" required placeholder="e.g. Allergen briefing, Induction, Equipment training (slicer)">
+                    </div>
+                    <div class="form-group">
+                        <label>Training date *</label>
+                        <input type="date" name="training_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Duration (min)</label>
+                        <input type="number" name="duration_minutes" min="1" placeholder="60">
+                    </div>
+                    <div class="form-group">
+                        <label>Trainer</label>
+                        <input type="text" name="trainer" placeholder="Who delivered the training">
+                    </div>
+                    <div class="form-group">
+                        <label>Signed off by</label>
+                        <input type="text" name="signed_off_by" placeholder="Defaults to you">
+                    </div>
+                    <div class="form-group full">
+                        <label>Notes</label>
+                        <input type="text" name="notes">
+                    </div>
                 </div>
-                {% endif %}
-                {% if person.phone %}
-                <div>
-                    <div class="info-item-label">Phone</div>
-                    <div class="info-item-value">{{ person.phone }}</div>
+                <div style="margin-top: 12px; text-align: right;">
+                    <button type="submit" class="btn">Save record</button>
                 </div>
-                {% endif %}
-                {% if person.start_date %}
-                <div>
-                    <div class="info-item-label">Started</div>
-                    <div class="info-item-value">{{ person.start_date.strftime('%d %b %Y') }}</div>
+            </form>
+        </div>
+
+        {% if training and training|length > 0 %}
+            {% for t in training %}
+            <div class="training-card">
+                <div class="training-body">
+                    <div class="training-title">{{ t.topic }}</div>
+                    <div class="training-meta">
+                        <strong>{{ t.training_date.strftime('%d %b %Y') }}</strong>
+                        {% if t.duration_minutes %} · {{ t.duration_minutes }} min{% endif %}
+                        {% if t.trainer %} · trainer: {{ t.trainer }}{% endif %}
+                        {% if t.signed_off_by %} · signed off by {{ t.signed_off_by }}{% endif %}
+                        {% if t.notes %}<br><em>{{ t.notes }}</em>{% endif %}
+                    </div>
                 </div>
-                {% endif %}
-                {% if person.end_date %}
-                <div>
-                    <div class="info-item-label">Left</div>
-                    <div class="info-item-value">{{ person.end_date.strftime('%d %b %Y') }}</div>
-                </div>
-                {% endif %}
+                <form action="/staff/{{ person.id }}/training/{{ t.id }}/delete" method="POST" onsubmit="return confirm('Delete this training record?');">
+                    <button type="submit" class="btn btn-sm btn-secondary">Delete</button>
+                </form>
             </div>
-            {% if person.notes %}
-            <div style="margin-top: 14px;">
-                <div class="info-item-label">Notes</div>
-                <div class="info-item-value">{{ person.notes }}</div>
-            </div>
-            {% endif %}
-        </div>
-
-        <h2 class="section-heading">Certifications</h2>
-        <div class="placeholder-card">
-            <strong>Certifications coming next.</strong><br>
-            Food hygiene, allergen awareness, HACCP, first aid — with photo upload of the cert and expiry alerts.
-        </div>
-
-        <h2 class="section-heading">Training records</h2>
-        <div class="placeholder-card">
-            <strong>Internal training log coming next.</strong><br>
-            Inductions, allergen briefings, equipment training — sign-off and date.
-        </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-list">No internal training recorded yet.</div>
+        {% endif %}
     </div>
 </body>
 </html>
