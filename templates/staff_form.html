@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if staff %}Edit{% else %}Add{% endif %} Staff - YieldGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+    <style>
+        .toggle-row {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 10px 12px;
+            border: 1px solid #E8E5DD;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        .toggle-row input { margin-top: 3px; cursor: pointer; }
+        .toggle-row:has(input:checked) { background: #EEF1ED; border-color: #4A6B45; }
+        .toggle-text { flex: 1; }
+        .toggle-title { font-weight: 600; font-size: 14px; }
+        .toggle-help { font-size: 12px; color: #6B6860; margin-top: 2px; }
+
+        .photo-upload {
+            border: 2px dashed #D6D2C7;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            background: #FAFAF7;
+        }
+        .photo-upload label { cursor: pointer; color: #4A6B45; font-weight: 500; }
+        .photo-upload input[type="file"] { display: block; margin: 8px auto; font-size: 13px; }
+        .current-photo {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #6B6860;
+        }
+        .current-photo img {
+            width: 50px; height: 50px; border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid #E8E5DD;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo"><span class="logo-icon">🍳</span><span>YieldGuard</span></a>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/recipes">Recipes</a>
+                <a href="/menus">Menus</a>
+                <a href="/haccp">HACCP</a>
+                <a href="/staff" class="active">Staff</a>
+                <a href="/alerts">Alerts</a>
+                <a href="/logout">Logout</a>
+            </div>
+            <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+        <div class="mobile-menu" id="mobileMenu">
+            <a href="/">Dashboard</a>
+            <a href="/inventory">Inventory</a>
+            <a href="/recipes">Recipes</a>
+            <a href="/menus">Menus</a>
+            <a href="/haccp">HACCP</a>
+            <a href="/staff" class="active">Staff</a>
+            <a href="/alerts">Alerts</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container-narrow">
+        {% if staff %}
+            <a href="/staff/{{ staff.id }}" class="back-link">← Back to {{ staff.first_name }}</a>
+        {% else %}
+            <a href="/staff" class="back-link">← Back to Staff</a>
+        {% endif %}
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-header">
+            <p class="page-eyebrow">Staff</p>
+            <h1>{% if staff %}Edit staff{% else %}Add staff{% endif %}</h1>
+        </div>
+
+        <form action="{% if staff %}/staff/{{ staff.id }}/edit{% else %}/staff/new{% endif %}" method="POST" enctype="multipart/form-data">
+            <div class="card">
+                <h2>Personal details</h2>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>First name *</label>
+                        <input type="text" name="first_name" required value="{{ staff.first_name if staff else '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Last name</label>
+                        <input type="text" name="last_name" value="{{ staff.last_name if staff and staff.last_name else '' }}">
+                    </div>
+                    <div class="form-group full">
+                        <label>Role</label>
+                        <input type="text" name="role" value="{{ staff.role if staff and staff.role else '' }}" placeholder="e.g. Head Chef, Sous Chef, Kitchen Porter, Manager">
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" name="email" value="{{ staff.email if staff and staff.email else '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="text" name="phone" value="{{ staff.phone if staff and staff.phone else '' }}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Employment</h2>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Start date</label>
+                        <input type="date" name="start_date" value="{{ staff.start_date.strftime('%Y-%m-%d') if staff and staff.start_date else '' }}">
+                    </div>
+                    {% if staff %}
+                    <div class="form-group">
+                        <label>End date <span class="hint">(if left)</span></label>
+                        <input type="date" name="end_date" value="{{ staff.end_date.strftime('%Y-%m-%d') if staff and staff.end_date else '' }}">
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if staff %}
+                <label class="toggle-row" style="margin-top: 14px;">
+                    <input type="checkbox" name="is_active" {% if staff.is_active %}checked{% endif %}>
+                    <div class="toggle-text">
+                        <div class="toggle-title">Currently active</div>
+                        <div class="toggle-help">Untick if this staff member has left. Their records stay for audit history.</div>
+                    </div>
+                </label>
+                {% endif %}
+
+                <div class="form-group full" style="margin-top: 14px;">
+                    <label>Notes</label>
+                    <textarea name="notes" rows="2" placeholder="Internal notes, e.g. shift preferences, dietary requirements">{{ staff.notes if staff and staff.notes else '' }}</textarea>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Photo (optional)</h2>
+                {% if staff and staff.photo_url %}
+                <div class="current-photo">
+                    <img src="{{ staff.photo_url }}" alt="Current photo">
+                    <span>Current photo. Upload a new one to replace.</span>
+                </div>
+                <input type="hidden" name="existing_photo_url" value="{{ staff.photo_url }}">
+                {% endif %}
+                <div class="photo-upload">
+                    <label for="photo">📷 Tap to add a photo</label>
+                    <input type="file" name="photo" id="photo" accept="image/*">
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px;">
+                <a href="{% if staff %}/staff/{{ staff.id }}{% else %}/staff{% endif %}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn">{% if staff %}Save changes{% else %}Add staff member{% endif %}</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
