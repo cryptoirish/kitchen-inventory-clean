@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ person.first_name }} - YieldGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='design.css') }}">
+    <style>
+        .person-header {
+            display: flex;
+            gap: 18px;
+            align-items: center;
+            background: #FFFFFF;
+            border: 1px solid #E8E5DD;
+            border-radius: 12px;
+            padding: 22px;
+            margin-bottom: 16px;
+        }
+        .person-photo {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #EEF1ED;
+            color: #4A6B45;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: 600;
+            flex-shrink: 0;
+            object-fit: cover;
+        }
+        .person-info { flex: 1; min-width: 0; }
+        .person-name {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            letter-spacing: -0.01em;
+        }
+        .person-role {
+            font-size: 14px;
+            color: #6B6860;
+            margin-bottom: 8px;
+        }
+        .pill {
+            display: inline-block;
+            padding: 2px 9px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .pill-active { background: #EEF1ED; color: #2D4128; }
+        .pill-archived { background: #FBEDED; color: #5A1F1F; }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+            margin-top: 8px;
+        }
+        .info-item-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6B6860;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        .info-item-value { font-size: 14px; color: #0A0A0A; }
+        .info-item-value a { color: #4A6B45; }
+
+        .placeholder-card {
+            background: #FAFAF7;
+            border: 1px dashed #D6D2C7;
+            border-radius: 12px;
+            padding: 28px 20px;
+            text-align: center;
+            color: #6B6860;
+            font-size: 13.5px;
+        }
+        .placeholder-card strong { color: #0A0A0A; }
+        .section-heading {
+            font-size: 12px;
+            font-weight: 600;
+            color: #6B6860;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 28px 0 12px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo"><span class="logo-icon">🍳</span><span>YieldGuard</span></a>
+            <div class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/inventory">Inventory</a>
+                <a href="/recipes">Recipes</a>
+                <a href="/menus">Menus</a>
+                <a href="/haccp">HACCP</a>
+                <a href="/staff" class="active">Staff</a>
+                <a href="/alerts">Alerts</a>
+                <a href="/logout">Logout</a>
+            </div>
+            <button class="hamburger" onclick="document.getElementById('mobileMenu').classList.toggle('active')">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+        <div class="mobile-menu" id="mobileMenu">
+            <a href="/">Dashboard</a>
+            <a href="/inventory">Inventory</a>
+            <a href="/recipes">Recipes</a>
+            <a href="/menus">Menus</a>
+            <a href="/haccp">HACCP</a>
+            <a href="/staff" class="active">Staff</a>
+            <a href="/alerts">Alerts</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <a href="/staff" class="back-link">← Back to Staff</a>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="person-header">
+            {% if person.photo_url %}
+            <img src="{{ person.photo_url }}" alt="{{ person.first_name }}" class="person-photo">
+            {% else %}
+            <div class="person-photo">{{ person.first_name[0]|upper }}{% if person.last_name %}{{ person.last_name[0]|upper }}{% endif %}</div>
+            {% endif %}
+            <div class="person-info">
+                <div class="person-name">
+                    {{ person.first_name }} {% if person.last_name %}{{ person.last_name }}{% endif %}
+                    {% if person.is_active %}
+                        <span class="pill pill-active" style="vertical-align: middle; font-size: 10px;">Active</span>
+                    {% else %}
+                        <span class="pill pill-archived" style="vertical-align: middle; font-size: 10px;">Archived</span>
+                    {% endif %}
+                </div>
+                {% if person.role %}<div class="person-role">{{ person.role }}</div>{% endif %}
+
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;">
+                    <a href="/staff/{{ person.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+                    {% if person.is_active %}
+                    <form action="/staff/{{ person.id }}/archive" method="POST" onsubmit="return confirm('Archive {{ person.first_name }}? Their training records stay in the audit trail.');" style="display: inline;">
+                        <button type="submit" class="btn btn-sm btn-secondary" style="color: #7C2D2D;">Archive</button>
+                    </form>
+                    {% else %}
+                    <form action="/staff/{{ person.id }}/restore" method="POST" style="display: inline;">
+                        <button type="submit" class="btn btn-sm">Restore</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Contact &amp; employment</h2>
+            <div class="info-grid">
+                {% if person.email %}
+                <div>
+                    <div class="info-item-label">Email</div>
+                    <div class="info-item-value"><a href="mailto:{{ person.email }}">{{ person.email }}</a></div>
+                </div>
+                {% endif %}
+                {% if person.phone %}
+                <div>
+                    <div class="info-item-label">Phone</div>
+                    <div class="info-item-value">{{ person.phone }}</div>
+                </div>
+                {% endif %}
+                {% if person.start_date %}
+                <div>
+                    <div class="info-item-label">Started</div>
+                    <div class="info-item-value">{{ person.start_date.strftime('%d %b %Y') }}</div>
+                </div>
+                {% endif %}
+                {% if person.end_date %}
+                <div>
+                    <div class="info-item-label">Left</div>
+                    <div class="info-item-value">{{ person.end_date.strftime('%d %b %Y') }}</div>
+                </div>
+                {% endif %}
+            </div>
+            {% if person.notes %}
+            <div style="margin-top: 14px;">
+                <div class="info-item-label">Notes</div>
+                <div class="info-item-value">{{ person.notes }}</div>
+            </div>
+            {% endif %}
+        </div>
+
+        <h2 class="section-heading">Certifications</h2>
+        <div class="placeholder-card">
+            <strong>Certifications coming next.</strong><br>
+            Food hygiene, allergen awareness, HACCP, first aid — with photo upload of the cert and expiry alerts.
+        </div>
+
+        <h2 class="section-heading">Training records</h2>
+        <div class="placeholder-card">
+            <strong>Internal training log coming next.</strong><br>
+            Inductions, allergen briefings, equipment training — sign-off and date.
+        </div>
+    </div>
+</body>
+</html>
