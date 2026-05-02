@@ -2342,6 +2342,48 @@ def get_compliance_alerts(org_id):
                 'link': '/haccp/pest-control',
             })
 
+    # 9. Staff certifications — expiry tracking
+    cur.execute('''
+        SELECT c.id, c.cert_type, c.expiry_date, s.id as staff_id,
+               s.first_name, s.last_name
+        FROM staff_certifications c
+        JOIN staff s ON s.id = c.staff_id
+        WHERE c.organization_id = %s
+          AND s.is_active = true
+          AND c.expiry_date IS NOT NULL
+        ORDER BY c.expiry_date ASC
+    ''', (org_id,))
+    expiring_certs = cur.fetchall()
+    today = datetime.now().date()
+    for c in expiring_certs:
+        days_left = (c['expiry_date'] - today).days
+        full_name = f"{c['first_name']} {c['last_name'] or ''}".strip()
+        if days_left < 0:
+            # Expired
+            alerts['critical'].append({
+                'type': 'cert_expired',
+                'severity': 'critical',
+                'title': f"{full_name}: {c['cert_type']} expired",
+                'detail': f"Expired {abs(days_left)} day{'s' if abs(days_left) != 1 else ''} ago. Renew or remove from active staff.",
+                'link': f"/staff/{c['staff_id']}",
+            })
+        elif days_left <= 30:
+            alerts['warning'].append({
+                'type': 'cert_expiring_soon',
+                'severity': 'warning',
+                'title': f"{full_name}: {c['cert_type']} expires in {days_left} day{'s' if days_left != 1 else ''}",
+                'detail': f"Expires {c['expiry_date'].strftime('%d %b %Y')}. Book a renewal.",
+                'link': f"/staff/{c['staff_id']}",
+            })
+        elif days_left <= 60:
+            alerts['info'].append({
+                'type': 'cert_expiring',
+                'severity': 'info',
+                'title': f"{full_name}: {c['cert_type']} expires in {days_left} days",
+                'detail': f"Expires {c['expiry_date'].strftime('%d %b %Y')}. Plan a renewal.",
+                'link': f"/staff/{c['staff_id']}",
+            })
+
     cur.close()
     conn.close()
     return alerts
@@ -3499,6 +3541,80 @@ def _build_data_export_zip(org_id):
         ])
     csvs['delivery_logs.csv'] = sio.getvalue()
 
+    # 7. Staff
+    cur.execute('''
+        SELECT first_name, last_name, role, email, phone,
+               start_date, end_date, is_active, notes
+        FROM staff WHERE organization_id = %s
+        ORDER BY is_active DESC, first_name, last_name
+    ''', (org_id,))
+    rows = cur.fetchall()
+    sio = StringIO()
+    w = csv.writer(sio)
+    w.writerow(['First Name', 'Last Name', 'Role', 'Email', 'Phone',
+                'Start Date', 'End Date', 'Active', 'Notes'])
+    for r in rows:
+        w.writerow([
+            r['first_name'], r['last_name'] or '', r['role'] or '',
+            r['email'] or '', r['phone'] or '',
+            r['start_date'].strftime('%Y-%m-%d') if r['start_date'] else '',
+            r['end_date'].strftime('%Y-%m-%d') if r['end_date'] else '',
+            'Yes' if r['is_active'] else 'No',
+            r['notes'] or ''
+        ])
+    csvs['staff.csv'] = sio.getvalue()
+
+    # 8. Staff certifications
+    cur.execute('''
+        SELECT s.first_name, s.last_name, c.cert_type, c.awarding_body,
+               c.certificate_number, c.issue_date, c.expiry_date, c.notes
+        FROM staff_certifications c
+        JOIN staff s ON s.id = c.staff_id
+        WHERE c.organization_id = %s
+        ORDER BY s.first_name, c.expiry_date
+    ''', (org_id,))
+    rows = cur.fetchall()
+    sio = StringIO()
+    w = csv.writer(sio)
+    w.writerow(['Staff Name', 'Cert Type', 'Awarding Body', 'Cert Number',
+                'Issue Date', 'Expiry Date', 'Notes'])
+    for r in rows:
+        w.writerow([
+            f"{r['first_name']} {r['last_name'] or ''}".strip(),
+            r['cert_type'], r['awarding_body'] or '',
+            r['certificate_number'] or '',
+            r['issue_date'].strftime('%Y-%m-%d') if r['issue_date'] else '',
+            r['expiry_date'].strftime('%Y-%m-%d') if r['expiry_date'] else '',
+            r['notes'] or ''
+        ])
+    csvs['staff_certifications.csv'] = sio.getvalue()
+
+    # 9. Staff training records
+    cur.execute('''
+        SELECT s.first_name, s.last_name, t.topic, t.training_date,
+               t.trainer, t.duration_minutes, t.signed_off_by, t.notes
+        FROM staff_training t
+        JOIN staff s ON s.id = t.staff_id
+        WHERE t.organization_id = %s
+        ORDER BY t.training_date DESC
+    ''', (org_id,))
+    rows = cur.fetchall()
+    sio = StringIO()
+    w = csv.writer(sio)
+    w.writerow(['Staff Name', 'Topic', 'Training Date', 'Trainer',
+                'Duration (minutes)', 'Signed Off By', 'Notes'])
+    for r in rows:
+        w.writerow([
+            f"{r['first_name']} {r['last_name'] or ''}".strip(),
+            r['topic'],
+            r['training_date'].strftime('%Y-%m-%d') if r['training_date'] else '',
+            r['trainer'] or '',
+            r['duration_minutes'] or '',
+            r['signed_off_by'] or '',
+            r['notes'] or ''
+        ])
+    csvs['staff_training.csv'] = sio.getvalue()
+
     cur.close()
     conn.close()
 
@@ -3521,6 +3637,9 @@ def _build_data_export_zip(org_id):
             f"- temperature_logs.csv  Full temperature history (incl. voided entries)\n"
             f"- cleaning_logs.csv     Cleaning task sign-offs\n"
             f"- delivery_logs.csv     Goods-in temperature checks\n"
+            f"- staff.csv             Staff list (active and archived)\n"
+            f"- staff_certifications.csv  Cert types, issue/expiry dates per person\n"
+            f"- staff_training.csv    Internal training records\n"
             f"\n"
             f"Your data is yours. Keep this archive somewhere safe.\n"
         )
@@ -4007,13 +4126,216 @@ def staff_detail(staff_id):
             conn.close()
             flash('Staff member not found.', 'danger')
             return redirect('/staff')
+
+        # Certifications, with computed expiry status
+        cur.execute('''
+            SELECT * FROM staff_certifications
+            WHERE staff_id = %s AND organization_id = %s
+            ORDER BY expiry_date NULLS LAST, issue_date DESC
+        ''', (staff_id, org_id))
+        certs_raw = cur.fetchall()
+
+        # Training records
+        cur.execute('''
+            SELECT * FROM staff_training
+            WHERE staff_id = %s AND organization_id = %s
+            ORDER BY training_date DESC
+        ''', (staff_id, org_id))
+        training = cur.fetchall()
+
         cur.close()
         conn.close()
-        return render_template('staff_detail.html', person=person)
+
+        # Annotate each cert with status: 'valid' / 'expiring' (within 60d) / 'expired' / 'no_expiry'
+        today = datetime.now().date()
+        certs = []
+        for c in certs_raw:
+            c = dict(c)
+            if c.get('expiry_date'):
+                days_left = (c['expiry_date'] - today).days
+                c['days_left'] = days_left
+                if days_left < 0:
+                    c['status'] = 'expired'
+                elif days_left <= 30:
+                    c['status'] = 'expiring_soon'
+                elif days_left <= 60:
+                    c['status'] = 'expiring'
+                else:
+                    c['status'] = 'valid'
+            else:
+                c['days_left'] = None
+                c['status'] = 'no_expiry'
+            certs.append(c)
+
+        # Standard UK food-industry cert types for the dropdown
+        cert_types = [
+            'Level 1 Food Safety',
+            'Level 2 Food Safety',
+            'Level 3 Food Safety',
+            'Level 4 Food Safety',
+            'HACCP Level 2',
+            'HACCP Level 3',
+            'Allergen Awareness',
+            'Manual Handling',
+            'First Aid at Work',
+            'Fire Safety',
+            'Other',
+        ]
+        awarding_bodies = ['CIEH', 'Highfield', 'RSPH', 'FSA', 'City & Guilds', 'In-house', 'Other']
+
+        return render_template('staff_detail.html',
+                               person=person,
+                               certs=certs,
+                               training=training,
+                               cert_types=cert_types,
+                               awarding_bodies=awarding_bodies)
     except Exception as e:
         print(f"Staff detail error: {e}")
         traceback.print_exc()
         return f"Error: {str(e)}", 500
+
+
+@app.route('/staff/<int:staff_id>/cert/new', methods=['POST'])
+@login_required
+def cert_new(staff_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        # Verify staff belongs to this org
+        cur.execute('SELECT id FROM staff WHERE id = %s AND organization_id = %s', (staff_id, org_id))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            flash('Staff member not found.', 'danger')
+            return redirect('/staff')
+
+        photo_url, photo_filename = _upload_photo_to_supabase(request.files.get('photo'), 'staff-certs')
+
+        cert_type = request.form.get('cert_type', '').strip()
+        custom_type = request.form.get('cert_type_other', '').strip()
+        if cert_type == 'Other' and custom_type:
+            cert_type = custom_type
+        if not cert_type:
+            flash('Cert type is required.', 'danger')
+            cur.close()
+            conn.close()
+            return redirect(f'/staff/{staff_id}')
+
+        issue_date = request.form.get('issue_date', '').strip()
+        expiry_date = request.form.get('expiry_date', '').strip() or None
+
+        cur.execute('''
+            INSERT INTO staff_certifications
+                (organization_id, staff_id, cert_type, awarding_body,
+                 certificate_number, issue_date, expiry_date, notes,
+                 photo_url, photo_filename)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (
+            org_id, staff_id, cert_type,
+            request.form.get('awarding_body', '').strip() or None,
+            request.form.get('certificate_number', '').strip() or None,
+            issue_date,
+            expiry_date,
+            request.form.get('notes', '').strip() or None,
+            photo_url,
+            photo_filename
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Certification added.', 'success')
+    except Exception as e:
+        print(f"Cert new error: {e}")
+        traceback.print_exc()
+        flash('Error adding certification.', 'danger')
+    return redirect(f'/staff/{staff_id}')
+
+
+@app.route('/staff/<int:staff_id>/cert/<int:cert_id>/delete', methods=['POST'])
+@login_required
+def cert_delete(staff_id, cert_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM staff_certifications WHERE id = %s AND staff_id = %s AND organization_id = %s',
+                    (cert_id, staff_id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Certification deleted.', 'success')
+    except Exception as e:
+        print(f"Cert delete error: {e}")
+        flash('Error deleting certification.', 'danger')
+    return redirect(f'/staff/{staff_id}')
+
+
+@app.route('/staff/<int:staff_id>/training/new', methods=['POST'])
+@login_required
+def training_new(staff_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT id FROM staff WHERE id = %s AND organization_id = %s', (staff_id, org_id))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            flash('Staff member not found.', 'danger')
+            return redirect('/staff')
+
+        topic = request.form.get('topic', '').strip()
+        if not topic:
+            flash('Training topic is required.', 'danger')
+            cur.close()
+            conn.close()
+            return redirect(f'/staff/{staff_id}')
+
+        duration_str = request.form.get('duration_minutes', '').strip()
+        duration = int(duration_str) if duration_str.isdigit() else None
+
+        cur.execute('''
+            INSERT INTO staff_training
+                (organization_id, staff_id, topic, training_date,
+                 trainer, duration_minutes, notes, signed_off_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (
+            org_id, staff_id, topic,
+            request.form.get('training_date'),
+            request.form.get('trainer', '').strip() or None,
+            duration,
+            request.form.get('notes', '').strip() or None,
+            request.form.get('signed_off_by', '').strip() or session.get('user_name', 'Unknown')
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Training record added.', 'success')
+    except Exception as e:
+        print(f"Training new error: {e}")
+        traceback.print_exc()
+        flash('Error adding training record.', 'danger')
+    return redirect(f'/staff/{staff_id}')
+
+
+@app.route('/staff/<int:staff_id>/training/<int:training_id>/delete', methods=['POST'])
+@login_required
+def training_delete(staff_id, training_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM staff_training WHERE id = %s AND staff_id = %s AND organization_id = %s',
+                    (training_id, staff_id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Training record deleted.', 'success')
+    except Exception as e:
+        print(f"Training delete error: {e}")
+        flash('Error deleting training record.', 'danger')
+    return redirect(f'/staff/{staff_id}')
 
 
 @app.route('/staff/<int:staff_id>/edit', methods=['GET', 'POST'])
