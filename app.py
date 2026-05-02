@@ -3537,8 +3537,8 @@ def _build_data_export_zip(org_id):
 # Photos uploaded to Supabase Storage (bucket: pest-photos)
 # ============================================================
 
-def _upload_pest_photo(file_storage):
-    """Upload a photo to Supabase Storage. Returns (url, filename) or (None, None)."""
+def _upload_photo_to_supabase(file_storage, bucket_name):
+    """Upload a photo to a Supabase Storage bucket. Returns (url, filename) or (None, None)."""
     if not file_storage or not file_storage.filename:
         return (None, None)
     supabase_url = os.environ.get('SUPABASE_URL', '').rstrip('/')
@@ -3551,8 +3551,7 @@ def _upload_pest_photo(file_storage):
     ext = ''
     if '.' in file_storage.filename:
         ext = '.' + file_storage.filename.rsplit('.', 1)[1].lower()
-        # Limit to safe image extensions
-        if ext not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic'):
+        if ext not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.pdf'):
             ext = '.jpg'
     safe_name = f"{uuid.uuid4().hex}{ext}"
 
@@ -3560,11 +3559,9 @@ def _upload_pest_photo(file_storage):
     if not file_bytes:
         return (None, None)
 
-    # Determine content type
     content_type = file_storage.content_type or 'image/jpeg'
 
-    # Upload via Supabase Storage REST API
-    upload_url = f"{supabase_url}/storage/v1/object/pest-photos/{safe_name}"
+    upload_url = f"{supabase_url}/storage/v1/object/{bucket_name}/{safe_name}"
     req = urllib.request.Request(
         upload_url,
         data=file_bytes,
@@ -3584,9 +3581,13 @@ def _upload_pest_photo(file_storage):
         print(f"Photo upload error: {e}")
         return (None, None)
 
-    # Public URL (bucket is public)
-    public_url = f"{supabase_url}/storage/v1/object/public/pest-photos/{safe_name}"
+    public_url = f"{supabase_url}/storage/v1/object/public/{bucket_name}/{safe_name}"
     return (public_url, file_storage.filename)
+
+
+def _upload_pest_photo(file_storage):
+    """Backwards-compat wrapper for existing pest control routes."""
+    return _upload_photo_to_supabase(file_storage, 'pest-photos')
 
 
 @app.route('/haccp/pest-control')
@@ -3876,6 +3877,236 @@ def pest_sighting_delete(sighting_id):
         print(f"Pest sighting delete error: {e}")
         flash('Error deleting sighting.', 'danger')
     return redirect('/haccp/pest-control')
+
+
+# ============================================================
+# STAFF — staff list, certifications, internal training
+# ============================================================
+
+@app.route('/staff')
+@login_required
+def staff_list():
+    try:
+        org_id = get_current_org_id()
+        show_archived = request.args.get('archived') == '1'
+        conn = get_db()
+        cur = conn.cursor()
+        if show_archived:
+            cur.execute('''
+                SELECT s.*,
+                    COUNT(DISTINCT c.id) as cert_count,
+                    COUNT(DISTINCT t.id) as training_count
+                FROM staff s
+                LEFT JOIN staff_certifications c ON c.staff_id = s.id
+                LEFT JOIN staff_training t ON t.staff_id = s.id
+                WHERE s.organization_id = %s
+                GROUP BY s.id
+                ORDER BY s.is_active DESC, s.first_name, s.last_name
+            ''', (org_id,))
+        else:
+            cur.execute('''
+                SELECT s.*,
+                    COUNT(DISTINCT c.id) as cert_count,
+                    COUNT(DISTINCT t.id) as training_count
+                FROM staff s
+                LEFT JOIN staff_certifications c ON c.staff_id = s.id
+                LEFT JOIN staff_training t ON t.staff_id = s.id
+                WHERE s.organization_id = %s AND s.is_active = true
+                GROUP BY s.id
+                ORDER BY s.first_name, s.last_name
+            ''', (org_id,))
+        all_staff = cur.fetchall()
+
+        # Quick stats for the page header
+        cur.execute('SELECT COUNT(*) as cnt FROM staff WHERE organization_id = %s AND is_active = true', (org_id,))
+        active_count = cur.fetchone()['cnt']
+
+        cur.execute('''
+            SELECT COUNT(*) as cnt FROM staff_certifications
+            WHERE organization_id = %s AND expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE
+        ''', (org_id,))
+        expired_count = cur.fetchone()['cnt']
+
+        cur.execute('''
+            SELECT COUNT(*) as cnt FROM staff_certifications
+            WHERE organization_id = %s AND expiry_date IS NOT NULL
+              AND expiry_date >= CURRENT_DATE
+              AND expiry_date < CURRENT_DATE + INTERVAL '30 days'
+        ''', (org_id,))
+        expiring_soon_count = cur.fetchone()['cnt']
+
+        cur.close()
+        conn.close()
+        return render_template('staff_list.html',
+                               staff=all_staff,
+                               show_archived=show_archived,
+                               active_count=active_count,
+                               expired_count=expired_count,
+                               expiring_soon_count=expiring_soon_count)
+    except Exception as e:
+        print(f"Staff list error: {e}")
+        traceback.print_exc()
+        return f"Error loading staff: {str(e)}", 500
+
+
+@app.route('/staff/new', methods=['GET', 'POST'])
+@login_required
+def staff_new():
+    if request.method == 'GET':
+        return render_template('staff_form.html', staff=None)
+    try:
+        org_id = get_current_org_id()
+        first_name = request.form.get('first_name', '').strip()
+        if not first_name:
+            flash('First name is required.', 'danger')
+            return redirect('/staff/new')
+        conn = get_db()
+        cur = conn.cursor()
+        photo_url, _ = _upload_photo_to_supabase(request.files.get('photo'), 'staff-certs')
+        start_date = request.form.get('start_date', '').strip() or None
+        cur.execute('''
+            INSERT INTO staff (organization_id, first_name, last_name, role,
+                               email, phone, start_date, notes, photo_url, is_active)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, true)
+            RETURNING id
+        ''', (
+            org_id,
+            first_name,
+            request.form.get('last_name', '').strip() or None,
+            request.form.get('role', '').strip() or None,
+            request.form.get('email', '').strip() or None,
+            request.form.get('phone', '').strip() or None,
+            start_date,
+            request.form.get('notes', '').strip() or None,
+            photo_url,
+        ))
+        new_id = cur.fetchone()['id']
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash(f"{first_name} added.", 'success')
+        return redirect(f'/staff/{new_id}')
+    except Exception as e:
+        print(f"Staff new error: {e}")
+        traceback.print_exc()
+        flash('Error adding staff member.', 'danger')
+        return redirect('/staff')
+
+
+@app.route('/staff/<int:staff_id>')
+@login_required
+def staff_detail(staff_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM staff WHERE id = %s AND organization_id = %s', (staff_id, org_id))
+        person = cur.fetchone()
+        if not person:
+            cur.close()
+            conn.close()
+            flash('Staff member not found.', 'danger')
+            return redirect('/staff')
+        cur.close()
+        conn.close()
+        return render_template('staff_detail.html', person=person)
+    except Exception as e:
+        print(f"Staff detail error: {e}")
+        traceback.print_exc()
+        return f"Error: {str(e)}", 500
+
+
+@app.route('/staff/<int:staff_id>/edit', methods=['GET', 'POST'])
+@login_required
+def staff_edit(staff_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        if request.method == 'POST':
+            photo_url_existing = request.form.get('existing_photo_url') or None
+            photo_url_new, _ = _upload_photo_to_supabase(request.files.get('photo'), 'staff-certs')
+            photo_url = photo_url_new or photo_url_existing
+            cur.execute('''
+                UPDATE staff
+                SET first_name = %s, last_name = %s, role = %s,
+                    email = %s, phone = %s, start_date = %s, end_date = %s,
+                    is_active = %s, notes = %s, photo_url = %s, updated_at = NOW()
+                WHERE id = %s AND organization_id = %s
+            ''', (
+                request.form.get('first_name', '').strip(),
+                request.form.get('last_name', '').strip() or None,
+                request.form.get('role', '').strip() or None,
+                request.form.get('email', '').strip() or None,
+                request.form.get('phone', '').strip() or None,
+                request.form.get('start_date', '').strip() or None,
+                request.form.get('end_date', '').strip() or None,
+                request.form.get('is_active') == 'on',
+                request.form.get('notes', '').strip() or None,
+                photo_url,
+                staff_id, org_id
+            ))
+            conn.commit()
+            cur.close()
+            conn.close()
+            flash('Staff member updated.', 'success')
+            return redirect(f'/staff/{staff_id}')
+
+        cur.execute('SELECT * FROM staff WHERE id = %s AND organization_id = %s', (staff_id, org_id))
+        person = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not person:
+            flash('Staff member not found.', 'danger')
+            return redirect('/staff')
+        return render_template('staff_form.html', staff=person)
+    except Exception as e:
+        print(f"Staff edit error: {e}")
+        traceback.print_exc()
+        flash('Error editing staff.', 'danger')
+        return redirect('/staff')
+
+
+@app.route('/staff/<int:staff_id>/archive', methods=['POST'])
+@login_required
+def staff_archive(staff_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE staff SET is_active = false, end_date = CURRENT_DATE, updated_at = NOW()
+            WHERE id = %s AND organization_id = %s
+        ''', (staff_id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Staff member archived.', 'success')
+    except Exception as e:
+        print(f"Staff archive error: {e}")
+        flash('Error archiving staff.', 'danger')
+    return redirect('/staff')
+
+
+@app.route('/staff/<int:staff_id>/restore', methods=['POST'])
+@login_required
+def staff_restore(staff_id):
+    try:
+        org_id = get_current_org_id()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE staff SET is_active = true, end_date = NULL, updated_at = NOW()
+            WHERE id = %s AND organization_id = %s
+        ''', (staff_id, org_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash('Staff member restored.', 'success')
+    except Exception as e:
+        print(f"Staff restore error: {e}")
+        flash('Error restoring staff.', 'danger')
+    return redirect(f'/staff/{staff_id}')
 
 
 @app.route('/data-export')
