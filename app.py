@@ -4603,6 +4603,435 @@ def data_export_monthly_cron():
     except Exception as e:
         return (f'Cron error: {str(e)}', 500)
 
+# ============================================================
+# EMAIL DIGEST — daily ops brief + weekly manager report
+# Reuses get_compliance_alerts() and the existing Resend setup.
+# Triggered by Render Cron Jobs hitting these endpoints with the
+# CRON_SECRET shared secret (same pattern as /data-export/monthly-cron).
+# ============================================================
 
+def _build_daily_digest_html(org, alerts, low_stock_items, business_name):
+    """Build HTML body for the daily ops brief.
+    alerts = dict from get_compliance_alerts() with critical/warning/info lists.
+    low_stock_items = list of dicts with name, stock, reorder_point, unit."""
+    today_str = datetime.now().strftime('%A, %d %B %Y')
+    critical = alerts.get('critical', [])
+    warning = alerts.get('warning', [])
+    info = alerts.get('info', [])
+
+    def render_alert_section(title, items, color):
+        if not items:
+            return ''
+        rows = ''.join(
+            f'<li style="margin-bottom: 8px;"><strong>{a["title"]}</strong>'
+            f'<br><span style="color: #666; font-size: 13px;">{a["detail"]}</span></li>'
+            for a in items
+        )
+        return (
+            f'<h3 style="color: {color}; margin-top: 20px; margin-bottom: 8px; '
+            f'font-size: 15px;">{title} ({len(items)})</h3>'
+            f'<ul style="padding-left: 20px; margin: 0;">{rows}</ul>'
+        )
+
+    alerts_html = ''
+    alerts_html += render_alert_section('Critical', critical, '#7a1f1a')
+    alerts_html += render_alert_section('Warnings', warning, '#d97706')
+    alerts_html += render_alert_section('FYI', info, '#4a5568')
+    if not (critical or warning or info):
+        alerts_html = (
+            '<div style="background: #f0f9f4; border-left: 4px solid #4A6B45; '
+            'padding: 12px 16px; margin: 12px 0;">All HACCP checks current. '
+            'No alerts today.</div>'
+        )
+
+    if low_stock_items:
+        rows = ''.join(
+            f'<tr><td style="padding: 6px 10px; border-bottom: 1px solid #eee;">'
+            f'{i["name"]}</td>'
+            f'<td style="padding: 6px 10px; border-bottom: 1px solid #eee; text-align: right;">'
+            f'{float(i["stock"]):.1f} {i["unit"]}</td>'
+            f'<td style="padding: 6px 10px; border-bottom: 1px solid #eee; text-align: right;">'
+            f'{float(i["reorder_point"]):.1f} {i["unit"]}</td></tr>'
+            for i in low_stock_items[:15]
+        )
+        more_note = (
+            f'<p style="color: #666; font-size: 12px; margin-top: 6px;">'
+            f'+ {len(low_stock_items) - 15} more — see inventory page.</p>'
+            if len(low_stock_items) > 15 else ''
+        )
+        inventory_html = (
+            f'<h3 style="color: #4A6B45; margin-top: 20px; margin-bottom: 8px; '
+            f'font-size: 15px;">Low Stock ({len(low_stock_items)})</h3>'
+            f'<table style="border-collapse: collapse; width: 100%; font-size: 14px;">'
+            f'<tr style="background: #f6f6f6;">'
+            f'<th style="padding: 6px 10px; text-align: left;">Item</th>'
+            f'<th style="padding: 6px 10px; text-align: right;">On hand</th>'
+            f'<th style="padding: 6px 10px; text-align: right;">Reorder at</th>'
+            f'</tr>{rows}</table>{more_note}'
+        )
+    else:
+        inventory_html = (
+            '<h3 style="color: #4A6B45; margin-top: 20px; margin-bottom: 8px; '
+            'font-size: 15px;">Inventory</h3>'
+            '<p style="color: #666; margin: 0;">All items above reorder point.</p>'
+        )
+
+    return f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                max-width: 640px; margin: 0 auto; padding: 24px; color: #222;">
+        <h1 style="color: #4A6B45; border-bottom: 2px solid #4A6B45; padding-bottom: 8px;
+                   margin-bottom: 4px; font-size: 22px;">
+            YieldGuard — Daily Ops Brief
+        </h1>
+        <p style="color: #888; font-size: 13px; margin-top: 0;">
+            {business_name} &middot; {today_str}
+        </p>
+        {alerts_html}
+        {inventory_html}
+        <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0 16px 0;">
+        <p style="color: #888; font-size: 12px;">
+            YieldGuard daily digest. Log in to action items.
+        </p>
+    </div>
+    """
+
+
+def _build_weekly_digest_html(org, alerts, weekly_stats, menu_summary, business_name):
+    """Weekly manager report — compliance summary + GP overview."""
+    today_str = datetime.now().strftime('%d %B %Y')
+
+    # KPI tiles
+    def kpi(value, label, warn=False):
+        color = '#7a1f1a' if warn else '#4A6B45'
+        return (
+            f'<div style="display: inline-block; padding: 12px 16px; margin: 4px 8px 4px 0; '
+            f'background: #f6f6f6; border-radius: 6px; min-width: 90px;">'
+            f'<div style="font-size: 22px; font-weight: bold; color: {color};">{value}</div>'
+            f'<div style="font-size: 12px; color: #666;">{label}</div></div>'
+        )
+
+    compliance_html = (
+        f'<h3 style="color: #4A6B45; margin-top: 20px; font-size: 15px;">Compliance (last 7 days)</h3>'
+        + kpi(weekly_stats['temp_logs_count'], 'Temp logs')
+        + kpi(weekly_stats['temp_breaches'], 'Breaches', warn=weekly_stats['temp_breaches'] > 0)
+        + kpi(weekly_stats['cleaning_logs_count'], 'Cleaning logs')
+        + kpi(weekly_stats['deliveries_count'], 'Deliveries')
+    )
+
+    cert_html = (
+        f'<h3 style="color: #4A6B45; margin-top: 20px; font-size: 15px;">Staff Training</h3>'
+        + kpi(weekly_stats['certs_expired'], 'Expired', warn=weekly_stats['certs_expired'] > 0)
+        + kpi(weekly_stats['certs_expiring_30d'], 'Expiring <30d', warn=weekly_stats['certs_expiring_30d'] > 0)
+        + kpi(weekly_stats['certs_valid'], 'Valid')
+    )
+
+    # Open items summary
+    critical_count = len(alerts.get('critical', []))
+    warning_count = len(alerts.get('warning', []))
+    open_html = (
+        f'<h3 style="color: #4A6B45; margin-top: 20px; font-size: 15px;">Open Items</h3>'
+        + kpi(critical_count, 'Critical', warn=critical_count > 0)
+        + kpi(warning_count, 'Warnings', warn=warning_count > 0)
+    )
+
+    # Menu GP summary
+    if menu_summary:
+        rows = ''.join(
+            f'<tr><td style="padding: 6px 10px; border-bottom: 1px solid #eee;">'
+            f'{m["name"]}</td>'
+            f'<td style="padding: 6px 10px; border-bottom: 1px solid #eee; text-align: right;">'
+            f'{m["item_count"]}</td>'
+            f'<td style="padding: 6px 10px; border-bottom: 1px solid #eee; text-align: right; '
+            f'color: {"#7a1f1a" if m["avg_gp_pct"] < 50 else ("#d97706" if m["avg_gp_pct"] < 65 else "#4A6B45")};">'
+            f'{m["avg_gp_pct"]:.1f}%</td></tr>'
+            for m in menu_summary
+        )
+        menu_html = (
+            f'<h3 style="color: #4A6B45; margin-top: 20px; font-size: 15px;">Menu GP%</h3>'
+            f'<table style="border-collapse: collapse; width: 100%; font-size: 14px;">'
+            f'<tr style="background: #f6f6f6;">'
+            f'<th style="padding: 6px 10px; text-align: left;">Menu</th>'
+            f'<th style="padding: 6px 10px; text-align: right;">Items</th>'
+            f'<th style="padding: 6px 10px; text-align: right;">Avg GP%</th>'
+            f'</tr>{rows}</table>'
+            f'<p style="color: #666; font-size: 12px; margin-top: 6px;">'
+            f'Target: 65–72% GP. Below 50% = loss-making.</p>'
+        )
+    else:
+        menu_html = ''
+
+    return f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                max-width: 640px; margin: 0 auto; padding: 24px; color: #222;">
+        <h1 style="color: #4A6B45; border-bottom: 2px solid #4A6B45; padding-bottom: 8px;
+                   margin-bottom: 4px; font-size: 22px;">
+            YieldGuard — Weekly Manager Report
+        </h1>
+        <p style="color: #888; font-size: 13px; margin-top: 0;">
+            {business_name} &middot; week ending {today_str}
+        </p>
+        {open_html}
+        {compliance_html}
+        {cert_html}
+        {menu_html}
+        <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0 16px 0;">
+        <p style="color: #888; font-size: 12px;">
+            YieldGuard weekly report. Log in for full audit detail.
+        </p>
+    </div>
+    """
+
+
+def _send_digest_email(to_email, subject, html_body):
+    """Send a digest email via Resend. Returns (success, error)."""
+    api_key = os.environ.get('RESEND_API_KEY')
+    if not api_key:
+        return (False, "RESEND_API_KEY not set")
+    try:
+        import resend
+    except ImportError:
+        return (False, "resend package not installed")
+    resend.api_key = api_key
+    sender = os.environ.get('RESEND_FROM', 'YieldGuard <onboarding@resend.dev>')
+    try:
+        resend.Emails.send({
+            "from": sender,
+            "to": to_email,
+            "subject": subject,
+            "html": html_body,
+        })
+        return (True, None)
+    except Exception as e:
+        return (False, str(e))
+
+
+def _get_weekly_stats(org_id):
+    """Aggregate compliance numbers for the past 7 days, plus cert status."""
+    conn = get_db()
+    cur = conn.cursor()
+    stats = {}
+
+    cur.execute("""SELECT COUNT(*) as c FROM haccp_temperature_logs
+                   WHERE organization_id = %s AND is_voided = false
+                     AND logged_at >= NOW() - INTERVAL '7 days'""", (org_id,))
+    stats['temp_logs_count'] = cur.fetchone()['c']
+
+    cur.execute("""SELECT COUNT(*) as c FROM haccp_temperature_logs
+                   WHERE organization_id = %s AND is_voided = false AND status = 'fail'
+                     AND logged_at >= NOW() - INTERVAL '7 days'""", (org_id,))
+    stats['temp_breaches'] = cur.fetchone()['c']
+
+    cur.execute("""SELECT COUNT(*) as c FROM haccp_cleaning_logs
+                   WHERE organization_id = %s AND is_voided = false
+                     AND completed_at >= NOW() - INTERVAL '7 days'""", (org_id,))
+    stats['cleaning_logs_count'] = cur.fetchone()['c']
+
+    cur.execute("""SELECT COUNT(*) as c FROM haccp_delivery_logs
+                   WHERE organization_id = %s
+                     AND delivery_date >= NOW() - INTERVAL '7 days'""", (org_id,))
+    stats['deliveries_count'] = cur.fetchone()['c']
+
+    cur.execute("""SELECT
+        COUNT(*) FILTER (WHERE expiry_date < CURRENT_DATE) AS expired,
+        COUNT(*) FILTER (WHERE expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days') AS expiring,
+        COUNT(*) FILTER (WHERE expiry_date > CURRENT_DATE + INTERVAL '30 days') AS valid
+        FROM staff_certifications c
+        JOIN staff s ON s.id = c.staff_id
+        WHERE c.organization_id = %s AND s.is_active = true
+          AND c.expiry_date IS NOT NULL""", (org_id,))
+    cert_row = cur.fetchone() or {}
+    stats['certs_expired'] = cert_row.get('expired') or 0
+    stats['certs_expiring_30d'] = cert_row.get('expiring') or 0
+    stats['certs_valid'] = cert_row.get('valid') or 0
+
+    cur.close()
+    conn.close()
+    return stats
+
+
+def _get_menu_summary(org_id):
+    """For each active menu, compute simple average GP%."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT id, name FROM menus
+        WHERE organization_id = %s AND is_active = true
+        ORDER BY name
+    ''', (org_id,))
+    menus_list = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    summary = []
+    for m in menus_list:
+        items = _menu_costing(m['id'], org_id)
+        if items:
+            avg = sum(i['gp_percent'] for i in items) / len(items)
+        else:
+            avg = 0
+        summary.append({
+            'name': m['name'],
+            'item_count': len(items),
+            'avg_gp_pct': avg,
+        })
+    return summary
+
+
+def _get_low_stock_items(org_id):
+    """Items at or below reorder point."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT name, stock, reorder_point, unit
+        FROM items
+        WHERE organization_id = %s AND stock <= reorder_point
+        ORDER BY (stock / NULLIF(reorder_point, 0)) ASC NULLS LAST, name
+    ''', (org_id,))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows
+
+
+@app.route('/digest/daily-cron', methods=['POST', 'GET'])
+def digest_daily_cron():
+    """Render Cron hits this once a day. Sends daily ops brief to every org's primary user.
+    Protected by CRON_SECRET (same pattern as /data-export/monthly-cron)."""
+    expected = os.environ.get('CRON_SECRET')
+    provided = request.headers.get('X-Cron-Secret') or request.args.get('secret')
+    if not expected or provided != expected:
+        return ('Unauthorized', 401)
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT o.id as org_id, o.business_name, o.name as org_name, u.email
+            FROM organizations o
+            JOIN users u ON u.id = (
+                SELECT MIN(id) FROM users
+                WHERE organization_id = o.id AND is_active = true
+            )
+        ''')
+        orgs = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        results = {'sent': 0, 'failed': 0, 'errors': []}
+        for row in orgs:
+            try:
+                org_id = row['org_id']
+                business_name = row.get('business_name') or row.get('org_name') or 'Your business'
+                alerts = get_compliance_alerts(org_id)
+                low_stock = _get_low_stock_items(org_id)
+                html = _build_daily_digest_html(row, alerts, low_stock, business_name)
+                today_str = datetime.now().strftime('%d %b')
+                subject = f"YieldGuard Daily Brief — {today_str}"
+                success, err = _send_digest_email(row['email'], subject, html)
+                if success:
+                    results['sent'] += 1
+                else:
+                    results['failed'] += 1
+                    results['errors'].append(f"org {org_id}: {err}")
+            except Exception as e:
+                traceback.print_exc()
+                results['failed'] += 1
+                results['errors'].append(f"org {row['org_id']}: {str(e)}")
+
+        return (json.dumps(results), 200, {'Content-Type': 'application/json'})
+    except Exception as e:
+        traceback.print_exc()
+        return (f'Daily digest cron error: {str(e)}', 500)
+
+
+@app.route('/digest/weekly-cron', methods=['POST', 'GET'])
+def digest_weekly_cron():
+    """Render Cron hits this once a week (Mondays). Manager report per org."""
+    expected = os.environ.get('CRON_SECRET')
+    provided = request.headers.get('X-Cron-Secret') or request.args.get('secret')
+    if not expected or provided != expected:
+        return ('Unauthorized', 401)
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT o.id as org_id, o.business_name, o.name as org_name, u.email
+            FROM organizations o
+            JOIN users u ON u.id = (
+                SELECT MIN(id) FROM users
+                WHERE organization_id = o.id AND is_active = true
+            )
+        ''')
+        orgs = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        results = {'sent': 0, 'failed': 0, 'errors': []}
+        for row in orgs:
+            try:
+                org_id = row['org_id']
+                business_name = row.get('business_name') or row.get('org_name') or 'Your business'
+                alerts = get_compliance_alerts(org_id)
+                weekly_stats = _get_weekly_stats(org_id)
+                menu_summary = _get_menu_summary(org_id)
+                html = _build_weekly_digest_html(row, alerts, weekly_stats, menu_summary, business_name)
+                week_str = datetime.now().strftime('%d %b')
+                subject = f"YieldGuard Weekly Report — w/e {week_str}"
+                success, err = _send_digest_email(row['email'], subject, html)
+                if success:
+                    results['sent'] += 1
+                else:
+                    results['failed'] += 1
+                    results['errors'].append(f"org {org_id}: {err}")
+            except Exception as e:
+                traceback.print_exc()
+                results['failed'] += 1
+                results['errors'].append(f"org {row['org_id']}: {str(e)}")
+
+        return (json.dumps(results), 200, {'Content-Type': 'application/json'})
+    except Exception as e:
+        traceback.print_exc()
+        return (f'Weekly digest cron error: {str(e)}', 500)
+
+
+@app.route('/digest/test')
+@login_required
+def digest_test():
+    """Manual trigger for testing — sends both digests to the logged-in user
+    for their own org only. Visit /digest/test in browser while logged in."""
+    try:
+        org_id = get_current_org_id()
+        to_email = session.get('user_email')
+        if not to_email:
+            return "No email on session", 400
+
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT business_name, name FROM organizations WHERE id = %s', (org_id,))
+        org = cur.fetchone()
+        cur.close()
+        conn.close()
+        business_name = (org.get('business_name') if org else None) or (org.get('name') if org else None) or 'Your business'
+
+        alerts = get_compliance_alerts(org_id)
+        low_stock = _get_low_stock_items(org_id)
+        weekly_stats = _get_weekly_stats(org_id)
+        menu_summary = _get_menu_summary(org_id)
+
+        daily_html = _build_daily_digest_html(org, alerts, low_stock, business_name)
+        weekly_html = _build_weekly_digest_html(org, alerts, weekly_stats, menu_summary, business_name)
+
+        ok1, err1 = _send_digest_email(to_email, "[TEST] YieldGuard Daily Brief", daily_html)
+        ok2, err2 = _send_digest_email(to_email, "[TEST] YieldGuard Weekly Report", weekly_html)
+
+        return json.dumps({
+            'daily': {'sent': ok1, 'error': err1},
+            'weekly': {'sent': ok2, 'error': err2},
+            'sent_to': to_email,
+        }), 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        traceback.print_exc()
+        return f"Test error: {e}", 500
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
