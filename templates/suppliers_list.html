@@ -1,0 +1,21 @@
+{% extends "base.html" %} {% block content %}
+Suppliers
+{{ active_count }} active supplier{{ 's' if active_count != 1 else '' }}
+
++ Add Supplier
+{{ search }}
+
+All categories
+Filter
+ Show archived
+{% if suppliers %}
+{% for s in suppliers %} {% endfor %}
+Name	Category	Contact	Items	Recent deliveries	Rating
+{{ s.name }} {% if not s.is_active %}archived{% endif %}	{{ s.category or 'â€”' }}	{% if s.contact_name %}{{ s.contact_name }}
+{% endif %} {% if s.phone %}{{ s.phone }}{% endif %}	{{ s.item_count }}	{{ s.recent_deliveries }}	{% if s.rating %} {% for i in range(s.rating) %}â˜…{% endfor %}{% for i in range(5 - s.rating) %}â˜…{% endfor %} {% else %}â€”{% endif %}
+{% else %}
+No suppliers yet.
+
+Add your first supplier
+{% endif %}
+{% endblock %}
