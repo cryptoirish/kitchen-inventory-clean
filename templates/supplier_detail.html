@@ -1,0 +1,91 @@
+{% extends "base.html" %} {% block content %}
+â† All suppliers
+{{ supplier.name }} {% if not supplier.is_active %}archived{% endif %}
+{% if supplier.category %}{{ supplier.category }}{% endif %} {% if supplier.rating %}· {% for i in range(supplier.rating) %}â˜…{% endfor %}{% endif %}
+
+Edit {% if supplier.is_active %} Archive {% endif %}
+Contact
+{% if supplier.contact_name %}
+{{ supplier.contact_name }}
+
+{% endif %} {% if supplier.phone %}
+ðŸ“ž {{ supplier.phone }}
+
+{% endif %} {% if supplier.email %}
+âœ‰ {{ supplier.email }}
+
+{% endif %} {% if supplier.website %}
+ðŸŒ {{ supplier.website }}
+
+{% endif %} {% if supplier.address %}
+{{ supplier.address|replace('\n', '
+')|safe }}
+
+{% endif %} {% if not (supplier.contact_name or supplier.phone or supplier.email or supplier.website or supplier.address) %}
+No contact details on file.
+
+{% endif %}
+Account
+{% if supplier.account_number %}
+Acct: {{ supplier.account_number }}
+
+{% endif %} {% if supplier.payment_terms %}
+Terms: {{ supplier.payment_terms }}
+
+{% endif %} {% if supplier.delivery_days %}
+Delivers: {{ supplier.delivery_days }}
+
+{% endif %} {% if supplier.minimum_order %}
+Min order: Â£{{ '%.2f'|format(supplier.minimum_order) }}
+
+{% endif %} {% if not (supplier.account_number or supplier.payment_terms or supplier.delivery_days or supplier.minimum_order) %}
+No account info on file.
+
+{% endif %}
+Notes
+{% if supplier.notes %}
+{{ supplier.notes }}
+
+{% else %}
+No notes.
+
+{% endif %}
+Items supplied
+{% if supplied_items %}
+{% for si in supplied_items %} {% endfor %}
+Item	Supplier SKU	Pack	Their price	My cost	Preferred	
+{{ si.item_name }} / {{ si.unit }}	{{ si.supplier_sku or 'â€”' }}	{{ si.pack_size or 'â€”' }}	{% if si.current_price is not none %}Â£{{ '%.2f'|format(si.current_price) }}{% else %}â€”{% endif %}	Â£{{ '%.2f'|format(si.inventory_cost) }}	{% if si.is_preferred %}Preferred{% endif %}	History Edit
+SKU 
+{{ si.supplier_sku or '' }}
+Pack 
+{{ si.pack_size or '' }}
+Price (Â£) 
+Notes 
+{{ si.notes or '' }}
+ Preferred
+Save
+Unlink item
+{% else %}
+No items linked yet.
+
+{% endif %} {% if available_items %}
+Link an item to this supplier
+Item 
+â€” pick item â€”
+Supplier SKU 
+Pack size 
+e.g. 5kg
+Price (Â£) 
+ Preferred
+Link
+{% endif %}
+Recent deliveries
+{% if recent_deliveries %}
+{% for d in recent_deliveries %} {% endfor %}
+Date	Chilled	Frozen	Accepted	By
+{{ d.delivery_date.strftime('%d %b %Y') if d.delivery_date else '' }}	{% if d.chilled_temp is not none %}{{ d.chilled_temp }}Â°C{% else %}â€”{% endif %}	{% if d.frozen_temp is not none %}{{ d.frozen_temp }}Â°C{% else %}â€”{% endif %}	{% if d.accepted %}âœ“{% else %}âœ—{% endif %}	{{ d.inspected_by or 'â€”' }}
+{% else %}
+No deliveries logged from this supplier yet.
+
+{% endif %}
+{% endblock %}
