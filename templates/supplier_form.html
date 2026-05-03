@@ -1,0 +1,35 @@
+{% extends "base.html" %} {% block content %}
+{% if supplier %}Edit Supplier{% else %}Add Supplier{% endif %}
+Basics
+Supplier name * 
+{{ supplier.name if supplier else '' }}
+Category 
+{{ supplier.category or '' if supplier else '' }}
+Rating (1â€“5) 
+â€” not rated â€”
+Contact
+Contact name 
+{{ supplier.contact_name or '' if supplier else '' }}
+Phone 
+{{ supplier.phone or '' if supplier else '' }}
+Email 
+{{ supplier.email or '' if supplier else '' }}
+Website 
+{{ supplier.website or '' if supplier else '' }}
+Address 
+{{ supplier.address or '' if supplier else '' }}
+Account
+Account number 
+{{ supplier.account_number or '' if supplier else '' }}
+Payment terms 
+{{ supplier.payment_terms or '' if supplier else '' }}
+Delivery days 
+{{ supplier.delivery_days or '' if supplier else '' }}
+Minimum order (Â£) 
+Notes 
+{{ supplier.notes or '' if supplier else '' }}
+{% if supplier %}
+ Active
+{% endif %}
+{% if supplier %}Save changes{% else %}Add supplier{% endif %} Cancel
+{% endblock %}
