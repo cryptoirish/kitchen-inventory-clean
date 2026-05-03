@@ -1,0 +1,23 @@
+{% extends "base.html" %} {% block content %}
+â† {{ link.supplier_name }}
+{{ link.item_name }}
+Price history from {{ link.supplier_name }}
+
+{% if stats %}
+Â£{{ '%.2f'|format(stats.current) }}
+Current
+Â£{{ '%.2f'|format(stats.min) }}
+Lowest
+Â£{{ '%.2f'|format(stats.max) }}
+Highest
+{% if stats.change_pct > 0 %}+{% endif %}{{ '%.1f'|format(stats.change_pct) }}%
+All-time change
+{% endif %} {% if history %}
+{% for h in history %} {% endfor %}
+Date	Price	Pack	Recorded by	Notes
+{{ h.recorded_at.strftime('%d %b %Y %H:%M') }}	Â£{{ '%.2f'|format(h.price) }}	{{ h.pack_size or 'â€”' }}	{{ h.recorded_by or 'â€”' }}	{{ h.notes or '' }}
+{% else %}
+No price history yet.
+
+{% endif %}
+{% endblock %}
